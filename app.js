@@ -327,8 +327,9 @@ function painelDesempenho() {
 // aula de questões/fixação tem .lei (a lei seca); a lei tem .arts = [[artigo, página, lei dentro do PDF]]
 function artigoDe(aKey, ref) {
   const A = aula(aKey), L = A?.lei && aula(A.lei); if (!L?.arts || !ref) return null;
-  const m = /Art(?:igo)?s?\.?\s*(\d{1,4})\s*[º°o]?\s*(?:-\s*([A-Z])\b)?/i.exec(ref); if (!m) return null;
-  const art = String(+m[1]) + (m[2] ? '-' + m[2].toUpperCase() : ''), lei = /12\.?153/.test(ref) ? 2 : /9\.?099/.test(ref) ? 1 : 0;
+  // "Art. 1.015" (milhar com ponto) = artigo 1015
+  const m = /Art(?:igo)?s?\.?\s*(\d{1,2}\.\d{3}|\d{1,4})\s*[º°o]?\s*(?:-\s*([A-Z])\b)?/i.exec(ref); if (!m) return null;
+  const art = String(+m[1].replace('.', '')) + (m[2] ? '-' + m[2].toUpperCase() : ''), lei = /12\.?153/.test(ref) ? 2 : /9\.?099/.test(ref) ? 1 : 0;
   const e = L.arts.find(x => x[0] === art && x[2] === lei) || L.arts.find(x => x[0] === art);
   return e ? { a: A.lei, p: e[1], art } : null;
 }
@@ -852,9 +853,19 @@ async function mergeData(data) {
   }
   for (const e of [...S.erros]) if (del[e.uid] && del[e.uid] >= ets(e)) { await errDel(e.id); S.erros = S.erros.filter(x => x.id !== e.id); r.rem++; }
   S.del = del; await kvSet('del', del);
+  // a sessão mais recente vence, mas as respostas da grade (qm, qa) e os itens feitos se juntam questão por questão:
+  // começar a sessão num aparelho e terminar em outro não perde as respostas de nenhum dos dois
+  const junta = (velho, novo) => {
+    const out = structuredClone(novo);
+    for (const campo of ['qm', 'qa']) for (const [k, m] of Object.entries(velho[campo] || {})) for (const [q, v] of Object.entries(m || {})) { const t = ((out[campo] ??= {})[k] ??= {}); if (!(q in t)) t[q] = v; }
+    (velho.items || []).forEach((v, i) => { if (v) (out.items ??= [])[i] = true; });
+    if (!out.sim && velho.sim) out.sim = velho.sim;
+    return out;
+  };
   for (const [n, rp] of Object.entries(data.prog || {})) {
     const lp = S.prog[n]; const tl = lp?.upd || 0, tr = rp?.upd || 0;
-    if (!lp || tr > tl || (tr === tl && rp.done && !lp.done)) { if (JSON.stringify(lp) !== JSON.stringify(rp)) { S.prog[n] = rp; r.ses++; } }
+    const novo = !lp ? rp : (tr > tl || (tr === tl && rp.done && !lp.done)) ? junta(lp, rp) : junta(rp, lp);
+    if (JSON.stringify(lp) !== JSON.stringify(novo)) { S.prog[n] = novo; r.ses++; }
   }
   // só grava (e marca para sincronizar) se algo mudou: senão dois aparelhos com pasta ficam se regravando a cada 90 s
   if (r.ses) await saveProg();
