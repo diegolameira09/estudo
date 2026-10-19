@@ -1,4 +1,4 @@
-const VERSAO = 'estudo-tjsp-v7';
+const VERSAO = 'estudo-tjsp-v8';
 const ARQUIVOS = [
 "./",
 "index.html",

@@ -2,7 +2,7 @@ ESTUDO TJ-SP: app do cronograma do Escrevente TJ-SP (VUNESP), offline no PC, cel
 
 O que é
 - Mostra as sessões do dia (3 por dia, de segunda a sexta), abre o PDF na página certa, cronometra 20/5/20/3, corrige as questões pelo gabarito do próprio PDF e guarda o caderno de erros.
-- Prova em 14/03/2027. O cronograma tem 284 sessões e termina em 07/03/2027, deixando a última semana livre.
+- Prova em 14/03/2027. O cronograma tem 283 sessões e termina em 04/03/2027, deixando a última semana livre.
 - Depois de instalado, funciona sem internet. Progresso, erros, PDFs e gabaritos ficam só nos seus aparelhos.
 
 1. Endereço
@@ -59,4 +59,4 @@ O que é
 
 8. Atualizar o app
 - Mais > Versão do app mostra a versão instalada. "Procurar atualização" verifica na hora; havendo versão nova, o app recarrega sozinho.
-- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v7; a próxima é estudo-tjsp-v8).
+- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v8; a próxima é estudo-tjsp-v9).
