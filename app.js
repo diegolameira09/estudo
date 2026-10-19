@@ -128,15 +128,19 @@ const qUid = (n, key, q) => `q-${n}-${key}-${q}`;
    S.gab[arquivo] = { v: hash do PDF, g: { n: { r, ref } } }, em kv 'gab|arquivo' (fica no aparelho: não vai para backup nem GitHub).
    A letra escolhida fica em S.prog[n].qa[chave][questão]; S.qSel = questão aberta; S.qChute = "chutei" ligado para a próxima resposta. */
 const gabDe = it => { const A = aula(it?.a); const G = A && S.gab[A.file]; return G && (!S.pv[A.file] || !G.v || G.v === S.pv[A.file]) ? G.g : null; };
-let gabFila = Promise.resolve(); const gabLendo = new Set();
+// gabSem: PDFs em que o gabarito não foi achado nesta abertura do app. Sem isso, a grade pediria a leitura de novo
+// a cada redesenho, e o redesenho depois da leitura pediria outra: laço sem fim. Reimportar o PDF tira da lista.
+let gabFila = Promise.resolve(); const gabLendo = new Set(), gabSem = new Set();
 function lerGab(file) {
-  if (gabLendo.has(file) || !S.pdfs.has(file)) return; gabLendo.add(file);
+  if (gabLendo.has(file) || gabSem.has(file) || !S.pdfs.has(file)) return; gabLendo.add(file);
   gabFila = gabFila.then(async () => {
     const blob = await pdfGet(file); if (!blob) return;
     const doc = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), isEvalSupported: false }).promise;
-    try { const g = await lerGabarito(doc); if (Object.keys(g).length) { S.gab[file] = { v: S.pv[file] || '', g }; await kvSet('gab|' + file, S.gab[file]); } } finally { try { await doc.destroy(); } catch {} }
+    let achou = false;
+    try { const g = await lerGabarito(doc); if (Object.keys(g).length) { S.gab[file] = { v: S.pv[file] || '', g }; await kvSet('gab|' + file, S.gab[file]); achou = true; } } finally { try { await doc.destroy(); } catch {} }
+    if (!achou) { gabSem.add(file); return; }
     $$('.qw').forEach(w => { const it = qItem(+w.dataset.qn, w.dataset.qk); if (aula(it?.a)?.file === file) qRepaint(+w.dataset.qn, w.dataset.qk); });
-  }).catch(err => console.warn('gabarito', file, err)).finally(() => gabLendo.delete(file));
+  }).catch(err => { gabSem.add(file); console.warn('gabarito', file, err); }).finally(() => gabLendo.delete(file));
 }
 const letrasGab = (G, q) => (G[q]?.r === 'V' || G[q]?.r === 'F' ? ['V', 'F'] : ['A', 'B', 'C', 'D', 'E']);
 function qGrid(n, key, it) {
@@ -174,6 +178,9 @@ async function marcaAuto(n, key, q, l) {
 }
 async function onQResp(b) {
   const w = b.closest('.qw'), n = +w.dataset.qn, key = w.dataset.qk, q = +b.dataset.q, it = qItem(n, key);
+  // trocar para a letra certa apaga o erro: se ele já tem anotação ou caderno da IA, pergunta antes
+  const G = gabDe(it), e = S.erros.find(x => x.uid === qUid(n, key, q));
+  if (e && !S.qChute && G?.[q]?.r === b.dataset.l && (e.porque || e.regra) && !confirm(`A questão ${q} passa a ficar certa e o erro dela, com o que já foi preenchido (anotação ou caderno da IA), será apagado. Continuar?`)) return;
   await marcaAuto(n, key, q, b.dataset.l);
   const m = S.prog[n].qm[key], prox = qNums(it.q).find(k => k > q && !m[k]);
   S.qUlt = { n, key, q }; S.qSel = prox ? { n, key, q: prox } : null; S.qChute = false;
@@ -413,7 +420,7 @@ function revList(list, key, titulo) {
 }
 function revCard(s) {
   const l1 = S.erros.filter(e => rev1(e.sessao) === s.n), l2 = S.erros.filter(e => rev2(e.sessao) === s.n && rev1(e.sessao) !== s.n);
-  let h = `<div class="card"><h3>Revisão</h3><div class="small mut">Refaça no PDF sem olhar a resposta. Erros das sessões ${s.de} a ${s.ate} e, na 2ª passada, de cerca de 1 mês antes.</div>`;
+  let h = `<div class="card"><h3>Revisão</h3><div class="small mut">Refaça no PDF sem olhar a resposta. Erros das sessões ${s.de} a ${s.ate} e, na 2ª passada, de cerca de 15 sessões antes (uma semana, com 3 por dia).</div>`;
   h += revList(l1, 'r1', '1ª revisão') + revList(l2, 'r2', '2ª passada');
   if (s.ev?.length) {
     h += `<div class="aulah">Questões inéditas</div>`;
@@ -779,7 +786,7 @@ async function importarPDFs(files) {
     await pdfPut(A.file, file); S.pdfs.add(A.file); ok++;
     if (h) { S.pv[A.file] = h; await kvSet('pv|' + A.file, h); if (A.ver && h !== A.ver) dif++; }
     // caderno de questões ou fixação: lê o gabarito agora (PDF reimportado = gabarito novo)
-    if (['F', 'Q'].includes(A.v)) { delete S.gab[A.file]; lerGab(A.file); }
+    if (['F', 'Q'].includes(A.v)) { delete S.gab[A.file]; gabSem.delete(A.file); lerGab(A.file); }
   }
   $('#dlg').close();
   try { await navigator.storage?.persist?.(); } catch {}
