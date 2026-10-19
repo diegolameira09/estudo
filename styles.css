@@ -120,3 +120,12 @@ details summary{cursor:pointer;min-height:36px;display:flex;align-items:center}
 .qa,.qc,.qz{min-width:38px;min-height:36px;border:1px solid var(--line);background:var(--card);border-radius:8px;font-size:14px;cursor:pointer;padding:0 8px}
 .qa.on,.qc.on{background:var(--acc);color:var(--acc-ink);border-color:var(--acc);font-weight:600}
 .qz{color:var(--mut)}
+:root{--SIM:#E0E7FF}
+@media (prefers-color-scheme: dark){:root{--SIM:#25285A}}
+.reforco{margin-top:8px;padding:8px 10px;border-left:3px solid var(--warn);background:var(--bg);border-radius:8px}
+.desemp{border-top:1px solid var(--line);padding:8px 0}
+.desemp summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none}
+.desemp summary::-webkit-details-marker{display:none}
+.dnome{width:42%;font-weight:600;font-size:14px}
+.dbar{flex:1;height:8px;border-radius:8px;background:var(--line);overflow:hidden}
+.dbar>i{display:block;height:100%;background:var(--acc)}

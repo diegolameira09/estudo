@@ -49,12 +49,14 @@ const pdfKeys = () => run('pdfs', 'readonly', s => s.getAllKeys());
 
 /* ---------------- estado ---------------- */
 const S = { C: null, pv: {}, del: {}, prog: {}, set: { dias: [1, 2, 3, 4, 5], durs: [20, 5, 20, 3] }, erros: [], pdfs: new Set(), tab: 'sessao', viewN: null, lastBackup: null, filtro: { mat: '', st: 'todos' }, gab: {}, ia: { prov: 'claude', keys: {}, models: {} } };
-const sess = n => S.C.sessoes[n - 1];
+// mini-simulados são sessões virtuais 9001, 9002... guardadas no progresso (S.prog[n].sim = itens)
+const SIM0 = 9000;
+const sess = n => (n > SIM0 ? (S.prog[n]?.sim ? { n, m: 'SIM', k: 'C', it: S.prog[n].sim } : undefined) : S.C.sessoes[n - 1]);
 const aula = k => S.C.aulas[k];
-const MAT = k => (k === 'REV' ? 'Revisão' : S.C.materias[k]);
+const MAT = k => (k === 'REV' ? 'Revisão' : k === 'SIM' ? 'Mini-simulado' : S.C.materias[k]);
 const total = () => S.C.sessoes.length;
 const curN = () => { for (const s of S.C.sessoes) if (!S.prog[s.n]?.done) return s.n; return null; };
-const doneCount = () => Object.values(S.prog).filter(p => p.done).length;
+const doneCount = () => Object.entries(S.prog).filter(([n, p]) => p.done && +n <= SIM0).length;
 const saveProg = () => { scheduleSync(); return kvSet('prog', S.prog); };
 const newUid = () => (crypto.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2));
 const legacyUid = e => `m${e.criado || 0}-${e.sessao}-${e.pagina}-${digits(e.questao)}`;
@@ -122,7 +124,9 @@ const matTag = k => `<span class="mat" style="background:var(--${k})">${esc(MAT(
 // ✗ e ? lançam um erro com uid fixo q-<sessão>-<chave>-<questão>, que volta nas revisões como qualquer erro
 const QM = ['', 'o', 'x', 'c'], QNOME = { '': 'sem marca', o: 'acertei', x: 'errei', c: 'chutei' };
 function qNums(q) { const out = []; if (!q?.length) return out; for (let k = q[0]; k <= q[1]; k += q[2] || 1) out.push(k); return out; }
-const qItem = (n, key) => (key[0] === 'e' ? sess(n).ev?.[+key.slice(1)] : sess(n).it?.[+key]);
+// chave da grade: '3' = item 3; 'e3' = questão inédita 3 da revisão; '3x' = reforço do item 3
+const qItem = (n, key) => { const s = sess(n); if (!s) return null; if (key[0] === 'e') return s.ev?.[+key.slice(1)];
+  if (key.endsWith('x')) { const it = s.it?.[parseInt(key, 10)]; return it?.x ? { t: 'L', ...it.x, tp: it.tp, ti: 'reforço' } : null; } return s.it?.[+key]; };
 const qUid = (n, key, q) => `q-${n}-${key}-${q}`;
 /* correção automática: com o gabarito lido do PDF neste aparelho, toca o número, depois a letra, e o app corrige.
    S.gab[arquivo] = { v: hash do PDF, g: { n: { r, ref } } }, em kv 'gab|arquivo' (fica no aparelho: não vai para backup nem GitHub).
@@ -150,7 +154,7 @@ function qGrid(n, key, it) {
   if (!G && (A?.v === 'F' || A?.v === 'Q')) lerGab(A.file);
   if (G) {
     const qa = S.prog[n]?.qa?.[key] || {}, sel = S.qSel?.n === n && S.qSel?.key === key ? S.qSel.q : null, ult = S.qUlt?.n === n && S.qUlt?.key === key ? S.qUlt.q : null;
-    const res = q => (qa[q] && G[q] ? `q.${q}: você ${qa[q]}, gabarito ${G[q].r} ${m[q] === 'o' ? '<b class="good">✓</b>' : '<b class="bad">✗</b>'}${m[q] === 'c' ? ' (chute)' : ''}` : '');
+    const res = q => (qa[q] && G[q] ? `q.${q}: você ${qa[q]}, gabarito ${G[q].r} ${m[q] === 'o' ? '<b class="good">✓</b>' : '<b class="bad">✗</b>'}${m[q] === 'c' ? ' (chute)' : ''} ${m[q] !== 'o' ? botaoArt(artigoDe(it.a, G[q].ref)) : ''}` : '');
     const linha = sel == null ? '' : `<div class="qr"><span class="small"><b>q.${sel}</b></span>${letrasGab(G, sel).map(l => `<button type="button" class="qa ${qa[sel] === l ? 'on' : ''}" data-q="${sel}" data-l="${l}">${l}</button>`).join('')}
       <button type="button" class="qc ${S.qChute ? 'on' : ''}" data-q="${sel}">chutei</button>${m[sel] ? `<button type="button" class="qz" data-q="${sel}" aria-label="Limpar a questão ${sel}">limpar</button>` : ''}</div>`;
     const info = sel != null && m[sel] ? res(sel) : ult != null ? res(ult) : '';
@@ -173,7 +177,7 @@ async function marcaAuto(n, key, q, l) {
   const pp = (S.prog[n] ??= {}), m = ((pp.qm ??= {})[key] ??= {}), qa = ((pp.qa ??= {})[key] ??= {});
   if (l) qa[q] = l; if (!qa[q]) return;
   const st = S.qChute ? 'c' : qa[q] === G[q].r ? 'o' : 'x'; m[q] = st;
-  if (key[0] !== 'e' && qNums(it.q).every(k => m[k])) (pp.items ??= [])[+key] = true;
+  if (/^\d+$/.test(key) && qNums(it.q).every(k => m[k])) (pp.items ??= [])[+key] = true;
   pp.upd = Date.now(); await saveProg(); await qErro(n, key, q, st, { minha: qa[q], gab: G[q].r });
 }
 async function onQResp(b) {
@@ -214,7 +218,7 @@ async function qErro(n, key, q, st, resp = {}) {
       if (e.tipo !== tipo || (resp.minha && e.minha !== resp.minha) || (resp.gab && e.gab !== resp.gab)) { e.tipo = tipo; if (resp.minha) e.minha = resp.minha; if (resp.gab) e.gab = resp.gab; e.upd = Date.now(); await errPut(e); }
       return;
     }
-    const ne = { data: todayISO(), sessao: n, aula: it.a, pagina: String(it.s), questao: String(q), minha: resp.minha || '', gab: resp.gab || '', tipo, porque: '', assunto: '', banca: '', regra: '', alerta: '', r1: '', r2: '',
+    const ne = { data: todayISO(), sessao: n > SIM0 ? (curN() || total()) : n, aula: it.a, pagina: String(it.s), questao: String(q), minha: resp.minha || '', gab: resp.gab || '', tipo, porque: '', assunto: '', banca: '', regra: '', alerta: '', r1: '', r2: '',
       criado: Date.now(), upd: Date.now(), exp: false, uid, aver: aula(it.a)?.ver, auto: 1 };
     ne.id = await errPut(ne); S.erros.push(ne); extrairDepois(ne);
   } else if (e) { await errDel(e.id); S.del[uid] = Date.now(); await kvSet('del', S.del); S.erros = S.erros.filter(x => x !== e); }
@@ -229,7 +233,7 @@ async function onQGrid(b) {
   if (!nx && e && (e.porque || e.regra || e.minha || e.gab) && !confirm(`Desmarcar a questão ${q}? O erro dela, com o que você já preencheu, será apagado.`)) return;
   if (nx) m[q] = nx; else delete m[q];
   // lista toda marcada: marca o item como feito
-  if (key[0] !== 'e' && qNums(it.q).every(k => m[k])) (pp.items ??= [])[+key] = true;
+  if (/^\d+$/.test(key) && qNums(it.q).every(k => m[k])) (pp.items ??= [])[+key] = true;
   pp.upd = Date.now(); await saveProg(); await qErro(n, key, q, nx);
   qRepaint(n, key);
   const cb = $(`#view input[data-item="${key}"]`); if (cb && pp.items?.[+key]) { cb.checked = true; cb.closest('.item').classList.add('done'); }
@@ -291,6 +295,89 @@ async function qDesmarca(uid) {
   const [, n, key, q] = String(uid).split('-'); const m = S.prog[n]?.qm?.[key];
   if (!uid.startsWith('q-') || !m?.[q]) return;
   delete m[q]; S.prog[n].upd = Date.now(); await saveProg();
+}
+
+/* ---------------- desempenho por tópico e reforço adaptativo ---------------- */
+// junta as marcas da grade por tópico (C.tps), das sessões antes de 'ate': { tp: { r: respondidas, ok: certas } }
+function statsTopicos(ate = Infinity) {
+  const st = {};
+  for (const s of S.C.sessoes) {
+    if (s.n >= ate || s.k !== 'C') continue; const qm = S.prog[s.n]?.qm; if (!qm) continue;
+    s.it.forEach((it, i) => { if (!it.tp) return; for (const k of [String(i), i + 'x']) for (const v of Object.values(qm[k] || {})) { const t = (st[it.tp] ??= { r: 0, ok: 0 }); t.r++; if (v === 'o') t.ok++; } });
+  }
+  return st;
+}
+// reforço: o item tem questões extras do mesmo tópico (it.x) e você errou 35% ou mais do tópico nos ciclos anteriores
+const REFORCO = 0.35;
+const reforcoDe = (it, st) => { const t = it.x && st[it.tp]; return t && t.r >= 3 && (t.r - t.ok) / t.r >= REFORCO ? t : null; };
+const pct = (a, b) => (b ? Math.round(100 * a / b) : 0);
+function painelDesempenho() {
+  const st = statsTopicos(), porMat = {};
+  for (const [tp, t] of Object.entries(st)) { const m = (porMat[tp.split('|')[0]] ??= { r: 0, ok: 0, tps: [] }); m.r += t.r; m.ok += t.ok; m.tps.push([tp, t]); }
+  if (!Object.keys(porMat).length) return `<div class="card"><h3>Desempenho</h3><p class="small mut">Responda as questões na grade das sessões: aqui aparece a taxa de acerto por matéria e os tópicos em que você mais erra.</p></div>`;
+  const tot = Object.values(porMat).reduce((a, m) => ({ r: a.r + m.r, ok: a.ok + m.ok }), { r: 0, ok: 0 });
+  return `<div class="card"><h3>Desempenho</h3><div class="small mut">${tot.r} questões respondidas · ${pct(tot.ok, tot.r)}% certas. Toque na matéria para ver os tópicos mais fracos.</div>` +
+    ORDEM.filter(sj => porMat[sj]).map(sj => { const m = porMat[sj], fracos = m.tps.filter(([, t]) => t.r >= 3).sort((a, b) => a[1].ok / a[1].r - b[1].ok / b[1].r).slice(0, 5);
+      return `<details class="desemp"><summary><span class="dnome">${esc(MAT(sj))}</span><span class="dbar"><i style="width:${pct(m.ok, m.r)}%"></i></span><span class="small">${pct(m.ok, m.r)}% de ${m.r}</span></summary>
+        <div class="small">${fracos.length ? fracos.map(([tp, t]) => `<div class="row"><span class="sp">${esc(S.C.tps?.[tp] || tp)}</span><span class="${t.ok / t.r < 1 - REFORCO ? 'bad' : 'mut'}">${pct(t.ok, t.r)}% de ${t.r}</span></div>`).join('') : '<span class="mut">Ainda poucas questões por tópico (mínimo 3).</span>'}</div></details>`; }).join('') + `</div>`;
+}
+
+/* ---------------- artigo citado no gabarito: abrir a lei seca na página dele ---------------- */
+// aula de questões/fixação tem .lei (a lei seca); a lei tem .arts = [[artigo, página, lei dentro do PDF]]
+function artigoDe(aKey, ref) {
+  const A = aula(aKey), L = A?.lei && aula(A.lei); if (!L?.arts || !ref) return null;
+  const m = /Art(?:igo)?s?\.?\s*(\d{1,4})\s*[º°o]?\s*(?:-\s*([A-Z])\b)?/i.exec(ref); if (!m) return null;
+  const art = String(+m[1]) + (m[2] ? '-' + m[2].toUpperCase() : ''), lei = /12\.?153/.test(ref) ? 2 : /9\.?099/.test(ref) ? 1 : 0;
+  const e = L.arts.find(x => x[0] === art && x[2] === lei) || L.arts.find(x => x[0] === art);
+  return e ? { a: A.lei, p: e[1], art } : null;
+}
+const artigoErro = e => artigoDe(e.aula, S.gab[aula(e.aula)?.file]?.g?.[+digits(e.questao)]?.ref || e.coment || e.regra);
+const botaoArt = x => (x ? `<button type="button" class="chip" data-open="${esc(x.a)}" data-page="${x.p}">Ler art. ${esc(x.art)}</button>` : '');
+
+/* ---------------- cartões da "Regra correta" (revisão rápida, offline) ---------------- */
+// ordem: nunca vistos, depois os que você não lembrou, depois os mais antigos; e.cartao = { ok, n, em }
+function cartoes() {
+  const L = S.erros.filter(e => e.regra).sort((a, b) => (a.cartao?.ok ?? -1) - (b.cartao?.ok ?? -1) || (a.cartao?.em || 0) - (b.cartao?.em || 0));
+  if (!L.length) return toast('Os cartões saem da "Regra correta" dos erros: gere o caderno com a IA primeiro.', 4000);
+  let i = 0; const f = $('#dlgForm'), dlg = $('#dlg');
+  const mostra = verso => {
+    const e = L[i], A = aula(e.aula);
+    f.innerHTML = `<h3>Cartão ${i + 1} de ${L.length}</h3><div class="small mut">${esc(A ? MAT(A.sj) : '')} · ${esc(A?.lab || '')}${e.cartao ? ` · ${e.cartao.ok ? 'lembrou' : 'não lembrou'} da última vez` : ''}</div>
+      <p style="font-size:18px"><b>${esc(e.assunto || `Questão ${e.questao}`)}</b></p>
+      ${verso ? `<div class="xtxt">${esc(e.regra)}${e.alerta ? '\n\nAtenção: ' + esc(e.alerta) : ''}</div>
+        <div class="row" style="margin-top:12px"><button type="button" class="btn" id="cNao">Não lembrei</button><span class="sp"></span><button type="button" class="btn pri" id="cSim">Lembrei</button></div>`
+      : `<p class="small mut">Diga a regra em voz alta antes de virar.</p><div class="row"><button type="button" class="btn" id="cFim">Fechar</button><span class="sp"></span><button type="button" class="btn pri" id="cVira">Virar</button></div>`}`;
+    if (verso) { $('#cSim', f).onclick = () => marca(1); $('#cNao', f).onclick = () => marca(0); }
+    else { $('#cVira', f).onclick = () => mostra(true); $('#cFim', f).onclick = () => { dlg.close(); render(); }; }
+  };
+  const marca = async ok => {
+    const e = L[i]; e.cartao = { ok, n: (e.cartao?.n || 0) + 1, em: Date.now() }; e.upd = Date.now(); await errPut(e);
+    if (++i >= L.length) { dlg.close(); toast('Fim dos cartões.'); render(); } else mostra(false);
+  };
+  dlg.showModal(); mostra(false);
+}
+
+/* ---------------- mini-simulado: questões que não entraram no cronograma, na proporção da prova ---------------- */
+const SIM_COMP = { LP: 8, PEN: 2, PPE: 2, PCI: 2, CON: 2, ADM: 3, LEG: 3, PCD: 1, INF: 4, RLM: 3 };
+const simulados = () => Object.keys(S.prog).map(Number).filter(n => n > SIM0 && S.prog[n]?.sim).sort((a, b) => a - b);
+async function novoSimulado() {
+  const usados = new Set(simulados().flatMap(n => S.prog[n].sim.flatMap(it => qNums(it.q).map(q => it.a + '|' + q))));
+  const itens = [];
+  for (const [sj, k] of Object.entries(SIM_COMP)) {
+    const esc_ = (S.C.sim?.[sj] || []).filter(([a, q]) => !usados.has(a + '|' + q)).slice(0, k);
+    for (const [a, q, p, g] of esc_) { const ult = itens[itens.length - 1]; if (ult && ult.a === a && ult.q[1] === q - 1) ult.q[1] = q; else itens.push({ t: 'L', a, s: p, q: [q, q, 1], ...(g ? { g } : {}) }); }
+  }
+  if (!itens.length) return toast('Acabaram as questões reservadas para simulado.');
+  const n = Math.max(SIM0, ...simulados()) + 1;
+  S.prog[n] = { sim: itens, criado: todayISO(), upd: Date.now() }; await saveProg();
+  S.viewN = n; setTab('sessao');
+}
+function resumoSimulado(n) {
+  const s = sess(n), qm = S.prog[n]?.qm || {}; let r = 0, ok = 0; const bl = {};
+  s.it.forEach((it, i) => { const sj = aula(it.a).sj, b = sj === 'LP' ? 'Português' : ['INF', 'RLM'].includes(sj) ? 'Gerais' : 'Direito'; const x = (bl[b] ??= { r: 0, ok: 0, t: 0 }); x.t += qNums(it.q).length;
+    for (const v of Object.values(qm[i] || {})) { r++; x.r++; if (v === 'o') { ok++; x.ok++; } } });
+  const total = s.it.reduce((t, it) => t + qNums(it.q).length, 0);
+  return `<div class="card"><h3>Resultado</h3><div>${ok} certas de ${r} respondidas (${total} no simulado)</div><div class="small mut">${Object.entries(bl).map(([b, x]) => `${b}: ${x.ok}/${x.r} de ${x.t}`).join(' · ')}. Na prova, Português e Direito exigem 50% cada.</div></div>`;
 }
 
 /* ---------------- timer 20/5/20/3 ---------------- */
@@ -368,14 +455,15 @@ function renderSessao() {
   if (n == null) { v.innerHTML = `<div class="card"><h2>Cronograma concluído</h2><p>${total()} sessões feitas. Hora de focar no edital.</p></div>`; return; }
   const s = sess(n), p = S.prog[n] || {}, pr = projections();
   let h = banners();
-  h += `<div class="card"><div class="row"><button class="ib" data-nav="-1" aria-label="Sessão anterior" ${n <= 1 ? 'disabled' : ''}>‹</button>
-    <div class="sp"><div class="small mut">Sessão ${n} de ${total()} · ${p.done ? 'feita em ' + br(p.date) : 'prevista ' + brShort(pr[n])}</div>
+  h += `<div class="card"><div class="row"><button class="ib" data-nav="-1" aria-label="Sessão anterior" ${n <= 1 || n > SIM0 ? 'disabled' : ''}>‹</button>
+    <div class="sp"><div class="small mut">${n > SIM0 ? `Mini-simulado nº ${n - SIM0} · criado em ${br(p.criado)}${p.done ? ' · feito em ' + br(p.date) : ''}` : `Sessão ${n} de ${total()} · ${p.done ? 'feita em ' + br(p.date) : 'prevista ' + brShort(pr[n])}`}</div>
     <h2>${matTag(s.m)}</h2></div>
-    <button class="ib" data-nav="1" aria-label="Próxima sessão" ${n >= total() ? 'disabled' : ''}>›</button></div>
+    <button class="ib" data-nav="1" aria-label="Próxima sessão" ${n >= total() || n > SIM0 ? 'disabled' : ''}>›</button></div>
     ${n !== cn && cn ? `<button class="chip" data-goto="${cn}">Voltar para a sessão atual (${cn})</button>` : ''}</div>`;
   h += `<div class="card" id="timer"><div class="timer"><div class="sp"><div class="tclock">00:00</div><div class="tphase"></div></div>
     <button class="btn pri" id="tGo">Iniciar</button><button class="btn" id="tSkip" aria-label="Próxima fase">»</button><button class="btn" id="tRst" aria-label="Zerar">↺</button></div>
     <div class="tbar"><i></i></div></div>`;
+  if (n > SIM0) h += resumoSimulado(n);
   h += s.k === 'C' ? contentCard(s, p) : revCard(s);
   h += `<div class="card"><label for="fech">Fechamento: explique o tópico em 3 linhas, sem consultar</label>
     <textarea id="fech" placeholder="O que eu aprendi hoje...">${esc(p.fech || '')}</textarea>
@@ -391,7 +479,7 @@ function renderSessao() {
   };
 }
 function contentCard(s, p) {
-  let h = `<div class="card"><h3>O que fazer</h3>`; let cur = null;
+  let h = `<div class="card"><h3>O que fazer</h3>`; let cur = null; const st = s.n <= SIM0 ? statsTopicos(s.n) : {};
   s.it.forEach((it, i) => {
     if (it.a !== cur) {
       cur = it.a; const A = aula(it.a);
@@ -402,9 +490,15 @@ function contentCard(s, p) {
     const done = !!p.items?.[i];
     h += `<div class="item ${done ? 'done' : ''}"><input type="checkbox" data-item="${i}" ${done ? 'checked' : ''} aria-label="Feito">
       <div><div class="txt">${itemText(it)}</div><div class="acts">${itemJumps(it).map(([lab, pg]) => `<button class="chip" data-open="${it.a}" data-page="${pg}" data-i="${i}">${esc(lab)}</button>`).join('')}</div>
-      ${it.t !== 'T' ? qGrid(s.n, String(i), it) : ''}</div></div>`;
+      ${it.t !== 'T' ? qGrid(s.n, String(i), it) : ''}${reforcoHTML(s.n, i, it, st)}</div></div>`;
   });
   return h + (s.it.some(it => it.t !== 'T') ? `<div class="small mut" style="margin-top:8px">Questões: toque no número e depois na letra que você marcou; o app corrige pelo gabarito do PDF (sem o PDF importado: um toque ✓, dois ✗, três ? chutei). Errada e chutada viram erro e voltam nas revisões.</div>` : '') + `</div>`;
+}
+// reforço do item: aparece quando você errou 35% ou mais do tópico nos ciclos anteriores
+function reforcoHTML(n, i, it, st) {
+  const t = reforcoDe(it, st); if (!t) return '';
+  return `<div class="reforco"><div class="small"><b>Reforço:</b> você errou ${pct(t.r - t.ok, t.r)}% deste tópico nos ciclos anteriores (${t.r} questões). Mais ${qNums(it.x.q).length}:</div>
+    <div class="acts"><button class="chip" data-open="${it.x.a}" data-page="${it.x.s}">${esc(nomeLista(it.x))} p. ${it.x.s}</button></div>${qGrid(n, i + 'x', qItem(n, i + 'x'))}</div>`;
 }
 function errLine(e) {
   const A = aula(e.aula);
@@ -414,7 +508,7 @@ function revList(list, key, titulo) {
   if (!list.length) return `<div class="small mut">${titulo}: nenhum erro lançado.</div>`;
   return `<div class="aulah">${titulo} (${list.length})</div>` + list.map(e => `<div class="item"><span></span><div>
     <div class="txt small">${errLine(e)}</div><div class="small mut">${esc(e.assunto || e.porque || '')}</div>
-    <div class="acts"><button class="chip" data-open="${esc(e.aula)}" data-page="${esc(e.pagina)}">Abrir p. ${esc(e.pagina)}</button>
+    <div class="acts"><button class="chip" data-open="${esc(e.aula)}" data-page="${esc(e.pagina)}">Abrir p. ${esc(e.pagina)}</button>${botaoArt(artigoErro(e))}
     <button class="chip ${e[key] === 'Acertei' ? 'on' : ''}" data-res="${e.id}" data-k="${key}" data-v="Acertei">Acertei</button>
     <button class="chip ${e[key] === 'Errei' ? 'on' : ''}" data-res="${e.id}" data-k="${key}" data-v="Errei">Errei</button></div></div></div>`).join('');
 }
@@ -496,6 +590,8 @@ function errForm(pre = {}) {
   let tipo = e.tipo;
   $('#fTipo', f).onclick = ev => { const b = ev.target.closest('[data-t]'); if (!b) return; tipo = tipo === b.dataset.t ? '' : b.dataset.t; $$('#fTipo .chip', f).forEach(x => x.classList.toggle('on', x.dataset.t === tipo)); };
   $('#fCancel', f).onclick = () => $('#dlg').close();
+  const art = e.id && artigoErro(e);
+  if (art) { $('#fCancel', f).insertAdjacentHTML('beforebegin', `<button type="button" class="btn" id="fArt">Ler art. ${esc(art.art)}</button>`); $('#fArt', f).onclick = () => { $('#dlg').close(); openPDF(art.a, art.p, {}); }; }
   if (e.id) $('#fDel', f).onclick = async () => { if (!confirm('Excluir este erro?')) return; await errDel(e.id); if (e.uid) { S.del[e.uid] = Date.now(); await kvSet('del', S.del); await qDesmarca(e.uid); } S.erros = S.erros.filter(x => x.id !== e.id); $('#dlg').close(); render(); };
   $('#fSave', f).onclick = async () => {
     const out = { ...e, sessao: +$('#fSes', f).value || e.sessao, data: $('#fData', f).value || todayISO(), aula: $('#fAula', f).value, pagina: $('#fPag', f).value, questao: $('#fQ', f).value.trim(),
@@ -521,7 +617,8 @@ function renderErros() {
   if (st === 'semregra') L = L.filter(e => !e.regra);
   if (st === 'refazer') L = L.filter(e => status(e) === 'Refazer');
   if (st === 'pendente') L = L.filter(e => status(e) === 'Pendente');
-  let h = `<div class="row" style="margin-bottom:10px"><h2 class="sp">Caderno de erros</h2><button class="btn pri" id="eNew">+ Novo</button></div>
+  const nCart = S.erros.filter(e => e.regra).length;
+  let h = painelDesempenho() + `<div class="row" style="margin-bottom:10px"><h2 class="sp">Caderno de erros</h2><button class="btn" id="eCart">Cartões (${nCart})</button><button class="btn pri" id="eNew">+ Novo</button></div>
   <div class="card"><select id="eMat"><option value="">Todas as matérias</option>${ORDEM.map(m => `<option value="${m}" ${m === mat ? 'selected' : ''}>${esc(MAT(m))}</option>`).join('')}</select>
   <div class="row wrap" style="margin-top:8px" id="eSt">${[['todos', 'Todos'], ['semregra', 'Sem regra'], ['pendente', 'Pendentes'], ['refazer', 'Refazer']].map(([k, l]) => `<button class="chip ${st === k ? 'on' : ''}" data-st="${k}">${l}</button>`).join('')}</div>
   <div class="small mut" style="margin-top:8px">${L.length} de ${S.erros.length} erros</div></div>`;
@@ -532,6 +629,7 @@ function renderErros() {
   const v = $('#view'); v.innerHTML = h;
   v.onchange = ev => { if (ev.target.id === 'eMat') { S.filtro.mat = ev.target.value; render(); } };
   v.onclick = ev => {
+    if (ev.target.id === 'eCart') return cartoes();
     if (ev.target.id === 'eNew') return errForm({ sessao: curN() || total(), aula: defaultAula(curN() || total()) });
     const c = ev.target.closest('[data-st]'); if (c) { S.filtro.st = c.dataset.st; render(); return; }
     const li = ev.target.closest('.li'); if (li) errForm(S.erros.find(x => x.id === +li.dataset.id));
@@ -541,7 +639,10 @@ function renderErros() {
 /* ---------------- render: cronograma ---------------- */
 function renderCrono() {
   const pr = projections(), cn = curN();
-  let h = `<div class="card"><div class="row"><input id="cGo" type="number" inputmode="numeric" placeholder="Ir para a sessão nº" min="1" max="${total()}"><button class="btn pri" id="cBtn">Ir</button></div>
+  const sims = simulados();
+  let h = `<div class="card"><h3>Mini-simulado</h3><p class="small mut">30 questões que não entraram no cronograma, na proporção da prova (Português 8, Direito 15, Informática 4, Raciocínio 3). Bom para o fim de cada ciclo.</p>
+    <div class="row wrap"><button class="btn pri" id="cSim">Fazer um mini-simulado</button>${sims.map(k => { const q = Object.values(S.prog[k].qm || {}).flatMap(Object.values); return `<button class="chip" data-sim="${k}">Nº ${k - SIM0}: ${q.filter(v => v === 'o').length}/${q.length}</button>`; }).join('')}</div></div>` +
+    `<div class="card"><div class="row"><input id="cGo" type="number" inputmode="numeric" placeholder="Ir para a sessão nº" min="1" max="${total()}"><button class="btn pri" id="cBtn">Ir</button></div>
   <div class="small mut" style="margin-top:8px">${doneCount()} feitas · ${total() - doneCount()} restantes · término previsto ${br(pr[total()])} com ${S.set.dias.length} sessões por semana</div></div><div class="card">`;
   let mes = '';
   for (const s of S.C.sessoes) {
@@ -553,6 +654,8 @@ function renderCrono() {
   }
   const v = $('#view'); v.innerHTML = h + `</div>`;
   v.onclick = ev => {
+    if (ev.target.id === 'cSim') return novoSimulado();
+    const sb = ev.target.closest('[data-sim]'); if (sb) { S.viewN = +sb.dataset.sim; setTab('sessao'); return; }
     if (ev.target.id === 'cBtn') { const n = +$('#cGo').value; if (n >= 1 && n <= total()) { S.viewN = n; setTab('sessao'); } return; }
     const r = ev.target.closest('.sess'); if (r) { S.viewN = +r.dataset.n; setTab('sessao'); }
   };
@@ -979,13 +1082,16 @@ function paintVGrid() {
   const n = V.ctx?.sess, s = n && sess(n), g = $('#vGrid'); let h = '';
   if (s) {
     (s.it || []).forEach((it, i) => { if (it.a === V.aula && it.t !== 'T') h += `<div class="small">${itemText(it)}</div>${qGrid(n, String(i), it)}`; });
+    const st = n <= SIM0 ? statsTopicos(n) : {};
+    (s.it || []).forEach((it, i) => { if (it.x?.a === V.aula && reforcoDe(it, st)) h += `<div class="small">Reforço p. ${it.x.s}: <b>${qtxt(it.x.q)}</b></div>${qGrid(n, i + 'x', qItem(n, i + 'x'))}`; });
     (s.ev || []).forEach((e, j) => { if (e.a === V.aula) h += `<div class="small">${nomeLista(e)} p. ${e.s}: <b>${qtxt(e.q)}</b></div>${qGrid(n, 'e' + j, e)}`; });
   }
   g.innerHTML = h; $('#vQ').hidden = !h; if (!h) g.hidden = true;
   $('#vQ').classList.toggle('on', !g.hidden);
 }
 $('#vQ').onclick = () => { $('#vGrid').hidden = !$('#vGrid').hidden; paintVGrid(); };
-$('#vGrid').onclick = e => { const b = e.target.closest('.qb, .ql, .qa, .qc, .qz'); if (!b) return; const c = b.classList; c.contains('ql') ? onQLetra(b) : c.contains('qa') ? onQResp(b) : c.contains('qc') ? onQChute(b) : c.contains('qz') ? onQLimpa(b) : onQGrid(b); };
+$('#vGrid').onclick = e => { const o = e.target.closest('[data-open]'); if (o) return openPDF(o.dataset.open, +o.dataset.page, { sess: V.ctx?.sess, jumps: [] });
+  const b = e.target.closest('.qb, .ql, .qa, .qc, .qz'); if (!b) return; const c = b.classList; c.contains('ql') ? onQLetra(b) : c.contains('qa') ? onQResp(b) : c.contains('qc') ? onQChute(b) : c.contains('qz') ? onQLimpa(b) : onQGrid(b); };
 $('#vErr').onclick = () => errForm({ sessao: V.ctx?.sess || curN() || total(), aula: V.aula, pagina: String(V.cur) });
 let rsz; window.addEventListener('resize', () => { if ($('#viewer').hidden || !V.doc) return; clearTimeout(rsz); rsz = setTimeout(async () => { const p = V.cur; await layout(); goPage(p); }, 250); });
 
