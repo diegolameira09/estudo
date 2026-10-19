@@ -54,4 +54,4 @@ O que é
 
 8. Atualizar o app
 - Mais > Versão do app mostra a versão instalada. "Procurar atualização" verifica na hora; havendo versão nova, o app recarrega sozinho.
-- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v2; a próxima é estudo-tjsp-v3).
+- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v3; a próxima é estudo-tjsp-v4).

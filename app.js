@@ -764,18 +764,22 @@ async function mesclarArquivos(files) {
 }
 
 /* ---------------- PDFs: importação ---------------- */
+// nome comparável: na cópia para o celular "+" vira espaço ou "_", acentos mudam de forma e maiúsculas variam
+const nomeChave = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\.pdf$/, '').replace(/[^a-z0-9]+/g, '');
 async function importarPDFs(files) {
-  const byName = new Map(Object.values(S.C.aulas).map(a => [a.file, a]));
+  const aulas = Object.values(S.C.aulas), porNome = new Map(aulas.map(a => [nomeChave(a.file), a])), porVer = new Map(aulas.filter(a => a.ver).map(a => [a.ver, a]));
   let ok = 0, dif = 0; const fora = [];
   const f = $('#dlgForm'); f.innerHTML = `<h3>Importando PDFs</h3><p id="impP" class="mut">0 de ${files.length}</p>`; $('#dlg').showModal();
   for (const [i, file] of [...files].entries()) {
     $('#impP').textContent = `${i + 1} de ${files.length}: ${file.name}`;
-    if (byName.has(file.name)) {
-      await pdfPut(file.name, file); S.pdfs.add(file.name); ok++;
-      try { const h = await fileHash(file); S.pv[file.name] = h; await kvSet('pv|' + file.name, h); if (byName.get(file.name).ver && h !== byName.get(file.name).ver) dif++; } catch {}
-      // caderno de questões ou fixação: lê o gabarito agora (PDF reimportado = gabarito novo)
-      if (['F', 'Q'].includes(byName.get(file.name).v)) { delete S.gab[file.name]; lerGab(file.name); }
-    } else fora.push(file.name);
+    let h = null; try { h = await fileHash(file); } catch {}
+    // reconhece pelo nome; se o arquivo foi renomeado, pelo conteúdo (hash)
+    const A = porNome.get(nomeChave(file.name)) || (h && porVer.get(h));
+    if (!A) { fora.push(file.name); continue; }
+    await pdfPut(A.file, file); S.pdfs.add(A.file); ok++;
+    if (h) { S.pv[A.file] = h; await kvSet('pv|' + A.file, h); if (A.ver && h !== A.ver) dif++; }
+    // caderno de questões ou fixação: lê o gabarito agora (PDF reimportado = gabarito novo)
+    if (['F', 'Q'].includes(A.v)) { delete S.gab[A.file]; lerGab(A.file); }
   }
   $('#dlg').close();
   try { await navigator.storage?.persist?.(); } catch {}
