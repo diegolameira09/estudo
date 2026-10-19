@@ -1,0 +1,55 @@
+ESTUDO TJ-SP: app do cronograma do Escrevente TJ-SP (VUNESP), offline no PC, celular e tablet
+
+O que é
+- Mostra as sessões do dia (3 por dia, de segunda a sexta), abre o PDF na página certa, cronometra 20/5/20/3, corrige as questões pelo gabarito do próprio PDF e guarda o caderno de erros.
+- Prova em 14/03/2027. O cronograma tem 280 sessões e termina em 07/03/2027, deixando a última semana livre.
+- Depois de instalado, funciona sem internet. Progresso, erros, PDFs e gabaritos ficam só nos seus aparelhos.
+
+1. Endereço
+- https://diegolameira09.github.io/estudo/
+- O repositório é público, mas só tem o app e o cronograma (nomes de arquivo e páginas). NUNCA suba os PDFs: são material protegido e trazem seu nome, CPF e e-mail.
+- Este app é separado do Estudo TI: dados, PDFs e sincronização de um não aparecem no outro.
+
+2. Instalar
+- PC: abra o endereço no Edge e instale como app (ícone na barra de endereço).
+- Celular e tablet: abra no Chrome, Menu (três pontos) > Instalar app.
+- Sem publicar, só no PC: dois cliques em "Abrir no PC.bat" (http://localhost:8124).
+
+3. Colocar os PDFs
+1) Copie a pasta PDF para o aparelho.
+2) No app: Mais > Importar PDFs > selecione todos os PDFs. São 55 arquivos, cerca de 150 MB.
+3) Ao importar, o app lê o gabarito de cada caderno de questões e de fixação (menos de 1 segundo por arquivo).
+
+4. Uso diário
+- Aba Sessão: siga a sessão do dia. Cada sessão é de uma matéria: leitura da lei seca (com os artigos), fixação de Verdadeiro ou Falso e questões dos cadernos, ou questões por tema em Português, Informática, Matemática e Raciocínio Lógico. Toda matéria começa pelo "Mapeando", o que mais cai.
+- Os botões abrem o PDF na página indicada. Marque cada item feito.
+- Questões: toque no número da questão e depois na letra que você marcou (A a E, ou V e F na fixação). O app compara com o gabarito do PDF, marca acerto ou erro, mostra a resposta certa e já abre a próxima. Se chutou, toque em "chutei" antes da letra. "limpar" desfaz.
+- Errada ou chutada vira erro na hora, com sua resposta e o gabarito, e volta sozinha nas revisões.
+- Sem o PDF importado, a grade funciona no modo manual: um toque ✓, dois ✗, três ? chutei.
+- Dentro do leitor de PDF, o botão "Questões" mostra a mesma grade, sem fechar o PDF.
+- Marcações no PDF (lápis): Caneta, Marca-texto, Texto, Borracha. Um dedo desenha, dois rolam.
+- Fechamento: escreva 3 linhas sem consultar e toque em Concluir sessão.
+- Revisões (sessões 5, 10, 15...): refaça os erros que voltam e marque Acertei ou Errei. Algumas revisões trazem questões inéditas, que não couberam nas sessões normais.
+
+5. Como o cronograma foi montado
+- A lei seca do edital é lida inteira, uma vez.
+- O resto do tempo foi dividido pelo peso de cada matéria na prova: Português 16 questões, Informática 9, Raciocínio Lógico 7, Direito Administrativo 6, Processo Penal, Processo Civil, Constitucional e Legislação Interna 5 cada, Penal 4, Matemática 4, Estatuto da PCD 2.
+- Dentro da matéria, primeiro as questões dos artigos que mais caíram no TJ-SP (as marcações de ano da lei seca) e as provas mais recentes (cadernos 2023 a 2025). Como não cabe tudo até a prova, ficaram de fora sobretudo questões de Matemática, Português e Legislação Interna.
+
+6. IA e caderno de erros (opcional, com internet)
+- O app tira do PDF, sem internet, o texto de cada questão errada e a linha do gabarito (resposta, artigo, explicação). Seu nome, CPF e e-mail da licença são removidos antes de qualquer envio.
+- Gerar direto pelo app: Mais > IA, escolha Claude, Gemini, OpenAI ou DeepSeek, cole a chave da API e escolha o modelo (no Claude já vem claude-opus-5-5; claude-sonnet-5-5 custa metade). "Gerar caderno (N)" só roda quando você toca.
+- Claude com o erro "not scoped to a workspace": preencha "ID do workspace" (começa com wrkspc_).
+- A chave fica só no aparelho: não vai para backup, sincronização nem GitHub. Defina um limite de gasto no painel do provedor.
+- Sem API: Mais > Copiar para a IA, e cole numa conversa com o prompt do arquivo prompt-ia.txt. Depois, Mais > Colar retorno da IA.
+
+7. Backup e sincronização
+- Toda semana: Mais > Baixar backup e guarde o arquivo fora do aparelho. Limpar os dados do navegador apaga tudo; o backup traz de volta progresso, erros e marcações (os PDFs e gabaritos são importados de novo).
+- Sincronizar aparelhos: crie no Google Drive a pasta EstudoTJSP (separada da do Estudo TI).
+  PC (Edge): Mais > Sincronização > Escolher pasta > EstudoTJSP. O app grava estudo-tjsp-pc.json e mescla sozinho.
+  Celular e tablet: FolderSync nos dois sentidos entre a pasta Download e Drive/EstudoTJSP, com filtro "estudo-tjsp-". Toque em ⇅ no topo ao começar e ao terminar.
+  Dê um nome diferente a cada aparelho em Mais > Sincronização.
+
+8. Atualizar o app
+- Mais > Versão do app mostra a versão instalada. "Procurar atualização" verifica na hora; havendo versão nova, o app recarrega sozinho.
+- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v1; a próxima é estudo-tjsp-v2).
