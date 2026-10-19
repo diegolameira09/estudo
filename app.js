@@ -84,7 +84,8 @@ function projections() {
   const out = {}; const d = new Date(); d.setHours(0, 0, 0, 0);
   if (!S.set.dias.length) S.set.dias = [1, 2, 3, 4, 5];
   const t = todayISO(), N = porDia();
-  let vagas = isStudyDay(d) ? N - Object.values(S.prog).filter(p => p.done && p.date === t).length : 0;
+  // só sessões do cronograma ocupam vaga do dia (mini-simulado, n > SIM0, não)
+  let vagas = isStudyDay(d) ? N - Object.entries(S.prog).filter(([k, p]) => +k <= SIM0 && p.done && p.date === t).length : 0;
   for (const s of S.C.sessoes) {
     const p = S.prog[s.n];
     if (p?.done) { out[s.n] = p.date; continue; }
@@ -545,7 +546,7 @@ async function onSessaoClick(e) {
   if (b.id === 'addErr') { errForm({ sessao: n, aula: defaultAula(n) }); return; }
   if (b.id === 'concl') {
     const pp = (S.prog[n] ??= {}); pp.done = true; pp.date = todayISO(); pp.fech = $('#fech').value; pp.upd = Date.now();
-    await saveProg(); tReset(); S.viewN = null; toast(`Sessão ${n} concluída`); render(); window.scrollTo(0, 0); return;
+    await saveProg(); tReset(); S.viewN = null; toast(n > SIM0 ? `Mini-simulado nº ${n - SIM0} concluído` : `Sessão ${n} concluída`); render(); window.scrollTo(0, 0); return;
   }
   if (b.id === 'undo') { S.prog[n].done = false; S.prog[n].upd = Date.now(); await saveProg(); render(); }
 }
@@ -562,6 +563,8 @@ function aulaOptions(sel) {
     .map(([k, a]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(a.lab)}</option>`).join('') + `</optgroup>`).join('');
 }
 function errForm(pre = {}) {
+  // erro lançado dentro de um mini-simulado volta na próxima revisão: fica na sessão atual do cronograma
+  if (+pre.sessao > SIM0) pre = { ...pre, sessao: curN() || total() };
   const e = { data: todayISO(), sessao: curN() || total(), aula: '', pagina: '', questao: '', minha: '', gab: '', tipo: '', porque: '', assunto: '', banca: '', regra: '', alerta: '', r1: '', r2: '', ...pre };
   const f = $('#dlgForm');
   f.innerHTML = `<h3>${e.id ? 'Editar erro' : 'Lançar erro'}</h3>
