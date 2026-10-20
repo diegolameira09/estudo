@@ -96,6 +96,10 @@ details summary{cursor:pointer;min-height:36px;display:flex;align-items:center}
 .vtools .chip{min-height:34px;padding:4px 10px;font-size:13px}
 .sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);cursor:pointer}
 .sw.on{border-color:var(--ink);box-shadow:0 0 0 2px var(--card) inset}
+.esp{display:inline-flex;gap:2px;margin-left:6px;padding-left:6px;border-left:1px solid var(--line)}
+.espb{width:30px;height:30px;border-radius:8px;border:2px solid transparent;background:none;display:grid;place-items:center;cursor:pointer;padding:0}
+.espb.on{border-color:var(--ink)}
+.espb i{display:block;border-radius:50%}
 #vPen.on{color:var(--acc)}
 .top .ib{min-width:40px;min-height:40px;font-size:20px;color:var(--mut)}
 .top .ib.warn{color:var(--warn)}

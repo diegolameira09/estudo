@@ -1183,9 +1183,9 @@ let rsz; window.addEventListener('resize', () => { if ($('#viewer').hidden || !V
 
 
 /* ---------------- marcações (caneta, marca-texto, borracha, texto) ---------------- */
-const PEN = ['#DC2626', '#2563EB', '#111827'], HL = ['#FFE600', '#22C55E', '#EF4444', '#3B82F6', '#A855F7'], HA = 0.3;
+const PEN = ['#DC2626', '#2563EB', '#111827'], ESP = [0.0008, 0.0016, 0.0024, 0.0032, 0.004], HL = ['#FFE600', '#22C55E', '#EF4444', '#3B82F6', '#A855F7'], HA = 0.3;
 const CNOME = { '#FFE600': 'Amarelo', '#22C55E': 'Verde', '#EF4444': 'Vermelho', '#3B82F6': 'Azul', '#A855F7': 'Roxo', '#DC2626': 'Vermelho', '#2563EB': 'Azul', '#111827': 'Preto' };
-Object.assign(V, { ann: new Map(), annFile: null, tool: null, color: { p: PEN[0], h: HL[0], x: PEN[0] }, txt: new Map(), undo: [], ptrs: new Map(), stroke: null, pan: null });
+Object.assign(V, { ann: new Map(), annFile: null, tool: null, color: { p: PEN[0], h: HL[0], x: PEN[0] }, esp: (() => { try { const w = +localStorage.getItem('caneta-tjsp'); return ESP.includes(w) ? w : 0.004; } catch { return 0.004; } })(), txt: new Map(), undo: [], ptrs: new Map(), stroke: null, pan: null });
 const akey = (f, p) => `a|${f}|${p}`;
 const aRange = f => IDBKeyRange.bound(`a|${f ?? ''}`, `a|${f ?? ''}￿`);
 async function loadAnn(file) {
@@ -1377,7 +1377,7 @@ vp.addEventListener('pointerdown', e => {
   }
   if (V.tool === 'p') {
     const ink = ensureInk(hit.d, hit.p); const ctx = ink.getContext('2d');
-    V.stroke = { p: hit.p, ink, ctx, op: { t: 'p', c: V.color.p, w: 0.004, pts: [rnd(hit.nx), rnd(hit.ny)] } };
+    V.stroke = { p: hit.p, ink, ctx, op: { t: 'p', c: V.color.p, w: V.esp, pts: [rnd(hit.nx), rnd(hit.ny)] } };
     ctx.strokeStyle = V.stroke.op.c; ctx.lineWidth = V.stroke.op.w * ink.width; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   }
 }, { passive: false });
@@ -1440,13 +1440,15 @@ function paintTools() {
   vp.style.touchAction = on ? 'none' : '';
   $$('#vTools [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === V.tool));
   const pal = V.tool === 'h' ? HL : V.tool === 'e' ? [] : PEN;
-  $('#vColors').innerHTML = pal.map(c => `<button class="sw ${V.color[V.tool] === c ? 'on' : ''}" data-c="${c}" style="background:${c}" aria-label="${CNOME[c] || 'Cor'}" title="${CNOME[c] || ''}"></button>`).join('');
+  $('#vColors').innerHTML = pal.map(c => `<button class="sw ${V.color[V.tool] === c ? 'on' : ''}" data-c="${c}" style="background:${c}" aria-label="${CNOME[c] || 'Cor'}" title="${CNOME[c] || ''}"></button>`).join('')
+    + (V.tool === 'p' ? '<span class="esp">' + ESP.map((w, i) => `<button class="espb ${V.esp === w ? 'on' : ''}" data-w="${w}" aria-label="Espessura 0,${i + 1}" title="0,${i + 1}"><i style="width:${4 + i * 3}px;height:${4 + i * 3}px;background:${V.color.p}"></i></button>`).join('') + '</span>' : '');
   if (V.tool === 'h' && V.doc) for (let k = Math.max(1, V.cur - 1); k <= Math.min(V.doc.numPages, V.cur + 2); k++) textLines(k);
 }
 $('#vPen').onclick = () => { V.tool = V.tool ? null : 'p'; paintTools(); };
 $('#vTools').onclick = async e => {
   const t = e.target.closest('[data-tool]'); if (t) { V.tool = t.dataset.tool; paintTools(); return; }
   const c = e.target.closest('[data-c]'); if (c) { V.color[V.tool] = c.dataset.c; paintTools(); return; }
+  const w = e.target.closest('[data-w]'); if (w) { V.esp = +w.dataset.w; try { localStorage.setItem('caneta-tjsp', w.dataset.w); } catch {} paintTools(); return; }
   const id = e.target.closest('button')?.id;
   if (id === 'vUndo') { const u = V.undo.pop(); if (!u) return toast('Nada para desfazer.'); V.ann.set(u.p, u.ops); drawInk(u.p); await saveAnn(u.p); if (u.p !== V.cur) goPage(u.p); }
   if (id === 'vDone') { V.tool = null; paintTools(); }

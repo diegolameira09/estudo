@@ -27,7 +27,7 @@ O que é
 - Errada ou chutada vira erro na hora, com sua resposta e o gabarito, e volta sozinha nas revisões.
 - Sem o PDF importado, a grade funciona no modo manual: um toque ✓, dois ✗, três ? chutei.
 - Dentro do leitor de PDF, o botão "Questões" mostra a mesma grade, sem fechar o PDF.
-- Marcações no PDF (lápis): Caneta, Marca-texto, Texto, Borracha. Um dedo desenha, dois rolam.
+- Marcações no PDF (lápis): Caneta (5 espessuras, da 0,1 à 0,5), Marca-texto, Texto, Borracha. Um dedo desenha, dois rolam.
 - Fechamento: escreva 3 linhas sem consultar e toque em Concluir sessão.
 - Revisões (sessões 5, 10, 15...): refaça os erros que voltam e marque Acertei ou Errei. Algumas revisões trazem questões inéditas, que não couberam nas sessões normais.
 - Reforço: do 2º ciclo em diante, se você errou 35% ou mais de um tópico nos ciclos anteriores, aparece embaixo das questões dele um "Reforço" com mais questões (que não estão em nenhuma outra sessão).
@@ -60,4 +60,4 @@ O que é
 
 8. Atualizar o app
 - Mais > Versão do app mostra a versão instalada. "Procurar atualização" verifica na hora; havendo versão nova, o app recarrega sozinho.
-- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v11; a próxima é estudo-tjsp-v12).
+- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v12; a próxima é estudo-tjsp-v13).
