@@ -17,7 +17,7 @@ O que é
 
 3. Colocar os PDFs
 1) Copie a pasta PDF para o aparelho.
-2) No app: Mais > Importar PDFs > selecione todos os PDFs. São 42 arquivos (os "Mapeando" e o edital não entram), cerca de 120 MB.
+2) No app: Mais > Importar PDFs > selecione todos os PDFs. São 42 arquivos, cerca de 120 MB (não entram: os 11 "Mapeando", o edital e os 2 cadernos de Matemática).
 3) Ao importar, o app lê o gabarito de cada caderno de questões e de fixação (menos de 1 segundo por arquivo).
 
 4. Uso diário
