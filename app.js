@@ -298,8 +298,9 @@ function itemDoErro(e) {
   for (const s of S.C.sessoes) for (const it of [...(s.it || []), ...(s.ev || [])])
     if (it.t !== 'T' && it.a === e.aula && q >= it.q[0] && q <= it.q[1] && it.s <= pg && (!best || it.s > best.s)) best = it;
   return best;
-}
-const podeExtrair = e => !e.xt && !!aula(e.aula) && S.pdfs.has(aula(e.aula).file) && !!digits(e.questao);
+}
+// também refaz quando o PDF importado mudou de versão desde a extração (o Estratégia atualizou a redação)
+const podeExtrair = e => { const A = aula(e.aula), pv = A && S.pv[A.file]; return !!A && S.pdfs.has(A.file) && !!digits(e.questao) && (!e.xt || !!(pv && e.xv && e.xv !== pv)); };
 async function extrairErro(e0) {
   const e = S.erros.find(x => x.uid === e0.uid) || e0, A = aula(e.aula), q = +digits(e.questao);
   if (!A || !q || !S.pdfs.has(A.file)) return false;
@@ -312,7 +313,7 @@ async function extrairErro(e0) {
   const nomes = [...(en?.nomes || []), ...(co?.nomes || [])], G = S.gab[A.file]?.g?.[q];
   // no material do TJ-SP o comentário é a linha do gabarito: resposta, artigo e, às vezes, a explicação
   const gtxt = G ? `Gabarito: ${G.r === 'V' ? 'Verdadeiro' : G.r === 'F' ? 'Falso' : G.r}. ${G.ref || ''}` : '';
-  e.enun = en ? limpar(en.texto, nomes) : ''; e.coment = co ? limpar(co.texto, nomes) : gtxt ? limpar(gtxt, nomes) : ''; if (G && !e.gab) e.gab = G.r; e.xt = Date.now(); e.xv = A.ver;
+  e.enun = en ? limpar(en.texto, nomes) : ''; e.coment = co ? limpar(co.texto, nomes) : gtxt ? limpar(gtxt, nomes) : ''; if (G && !e.gab) e.gab = G.r; e.xt = Date.now(); e.xv = S.pv[A.file] || A.ver;
   if (en && e.auto && String(en.pag) !== String(e.pagina)) e.pagina = String(en.pag);
   e.upd = Date.now(); await errPut(e);
   // com o texto em mãos, a grade pode trocar A a E por C e E (Cebraspe)
@@ -404,7 +405,10 @@ function mostraCom(A, q, c) {
 async function comentar(aKey, s, q, minha) {
   const A = aula(aKey); if (!A) return;
   const e = S.erros.find(x => x.aula === aKey && digits(x.questao) === String(q));
-  let c = (await kvGet('com|' + comChave(A.file, q))) || (e?.iaCom ? { t: e.iaCom } : null);
+  // comentário feito sobre outra versão do PDF (redação mudou) não vale: gera de novo
+  const pv = S.pv[A.file], atual = v => !v || !pv || v === pv;
+  let c = await kvGet('com|' + comChave(A.file, q)); if (c && !atual(c.v)) c = null;
+  if (!c && e?.iaCom && atual(e.iaComV)) c = { t: e.iaCom };
   if (c?.t) return mostraCom(A, q, c);
   const cfg = iaCfg();
   if (!cfg.key) return toast('Cadastre a chave da IA em Mais › IA para comentar questões.', 4000);
@@ -418,8 +422,8 @@ async function comentar(aKey, s, q, minha) {
     minha ? `Resposta do aluno: ${G(minha)}` : '', d.lei ? `Texto da lei (${d.leiNome}):\n${d.lei}` : ''].filter(Boolean).join('\n\n');
   try {
     const t = (await gerar(cfg, PROMPT_COM, user)).trim(); if (!t) throw new Error('A IA não devolveu texto.');
-    c = { t, em: Date.now(), por: `${cfg.prov}:${cfg.model}` }; await kvSet('com|' + comChave(A.file, q), c); S.comTem.add(comChave(A.file, q));
-    if (e) { e.iaCom = t; e.upd = Date.now(); await errPut(e); }
+    c = { t, em: Date.now(), por: `${cfg.prov}:${cfg.model}`, v: pv || '' }; await kvSet('com|' + comChave(A.file, q), c); S.comTem.add(comChave(A.file, q));
+    if (e) { e.iaCom = t; e.iaComV = pv || ''; e.upd = Date.now(); await errPut(e); }
     $('#toast').hidden = true; mostraCom(A, q, c);
     $$('.qw').forEach(w => { const it = qItem(+w.dataset.qn, w.dataset.qk); if (it?.a === aKey) qRepaint(+w.dataset.qn, w.dataset.qk); });
   } catch (err) { toast(err.message || String(err), 6000); }
