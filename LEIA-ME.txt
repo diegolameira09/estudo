@@ -23,7 +23,7 @@ O que é
 4. Uso diário
 - Aba Sessão: siga a sessão do dia. Cada sessão é de uma matéria e mostra o ciclo (ex.: "ciclo 2 · arts. 293 a 305"). Nas matérias de lei: ler o trecho da lei seca e fazer de 5 a 10 questões dele (fixação V/F e caderno). Em Português, Informática e Raciocínio Lógico: de 5 a 10 questões por tema.
 - Os botões abrem o PDF na página indicada. Marque cada item feito.
-- Questões: toque no número da questão e depois na letra que você marcou (A a E, ou V e F na fixação). O app compara com o gabarito do PDF, marca acerto ou erro, mostra a resposta certa e já abre a próxima. Se chutou, toque em "chutei" antes da letra. "limpar" desfaz.
+- Questões: toque no número da questão: ela aparece ali mesmo, recortada do PDF (com figura e formatação; toque na imagem para ampliar, e "Ver no PDF p. N" abre o PDF para conferir). Depois toque na letra que você marcou (A a E, ou V e F na fixação). O app compara com o gabarito do PDF, marca acerto ou erro, mostra a resposta certa e já abre a próxima. Se chutou, toque em "chutei" antes da letra. "limpar" desfaz.
 - Errada ou chutada vira erro na hora, com sua resposta e o gabarito, e volta sozinha nas revisões.
 - Sem o PDF importado, a grade funciona no modo manual: um toque ✓, dois ✗, três ? chutei.
 - Dentro do leitor de PDF, o botão "Questões" mostra a mesma grade, sem fechar o PDF.
@@ -60,4 +60,4 @@ O que é
 
 8. Atualizar o app
 - Mais > Versão do app mostra a versão instalada. "Procurar atualização" verifica na hora; havendo versão nova, o app recarrega sozinho.
-- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v12; a próxima é estudo-tjsp-v13).
+- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v13; a próxima é estudo-tjsp-v14).

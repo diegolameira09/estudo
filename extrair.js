@@ -14,16 +14,22 @@ const EMAIL_MARCA = /(?:Licenciado para|Licensed to)[^\n]{0,120}?([\w.+-]+@[\w-]
 async function itens(doc, p, cache) {
   if (!cache.has(p)) cache.set(p, (async () => {
     const pg = await doc.getPage(p); const H = pg.getViewport({ scale: 1 }).height; const tc = await pg.getTextContent();
-    return tc.items.filter(o => 'str' in o).map(o => ({ s: o.str, t: o.str.trim(), y: Math.round(o.transform[5]), eol: o.hasEOL, H }));
+    return tc.items.filter(o => 'str' in o).map(o => ({ s: o.str, t: o.str.trim(), y: Math.round(o.transform[5]), eol: o.hasEOL, H, x: o.transform[4], w: o.width || 0, h: o.height || Math.abs(o.transform[3]) || 10 }));
   })());
   return cache.get(p);
 }
 
+function fora(o, viz, p) {
+  const rodape = o.y < o.H * 0.12 || o.y > o.H * 0.9, numeracao = /^0*\d{1,3}\s*[.)]?$/.test(o.t) || !rodape;
+  // o "1." da questão também se repete na mesma altura em páginas vizinhas: repetido só sai se não for numeração (ou se estiver no rodapé)
+  return !!o.t && ((viz.has(o.y + '|' + o.t) && (!numeracao || rodape)) || (rodape && /^\d{1,4}$/.test(o.t) && (+o.t === p || +o.t === p - 1)) || /estrategiaconcursos\.com\.br/i.test(o.t) || CPF.test(o.t) || COD.test(o.t) || MARCA.test(o.t));
+}
+async function vizinhos(doc, p, cache) { const viz = new Set(); for (const q of [p - 1, p + 1]) if (q >= 1 && q <= doc.numPages) for (const o of await itens(doc, q, cache)) if (o.t) viz.add(o.y + '|' + o.t); return viz; }
+
 // texto da página sem o que se repete na mesma altura nas páginas vizinhas (professor, aula, curso, site, marca d'água),
 // sem número de página solto no rodapé e sem nada que pareça CPF; devolve também os nomes da marca d'água achados
 export async function textoPagina(doc, p, cache = new Map()) {
-  const its = await itens(doc, p, cache); const viz = new Set(); const nomes = new Set();
-  for (const q of [p - 1, p + 1]) if (q >= 1 && q <= doc.numPages) for (const o of await itens(doc, q, cache)) if (o.t) viz.add(o.y + '|' + o.t);
+  const its = await itens(doc, p, cache), viz = await vizinhos(doc, p, cache); const nomes = new Set();
   // nome e e-mail da licença podem vir partidos em vários pedaços de texto: procura também na página inteira
   const tudo = its.map(o => o.s).join(' ');
   for (const re of [NOME_MARCA, EMAIL_MARCA, CPF_NOME]) { const m = re.exec(tudo); if (m) nomes.add(m[1].trim()); }
@@ -33,10 +39,7 @@ export async function textoPagina(doc, p, cache = new Map()) {
     const mm = NOME_MARCA.exec(o.t); if (mm) nomes.add(mm[1].trim());
     // repetição na mesma altura só conta como cabeçalho/rodapé nas faixas de cima e de baixo: no meio da página,
     // "Banca:", "Ano:" e o ")" da numeração caem na mesma altura em páginas vizinhas por coincidência
-    const rodape = o.y < o.H * 0.12 || o.y > o.H * 0.9, numeracao = /^0*\d{1,3}\s*[.)]?$/.test(o.t) || !rodape;
-    // o "1." da questão também se repete na mesma altura em páginas vizinhas: repetido só sai se não for numeração (ou se estiver no rodapé)
-    const fora = o.t && ((viz.has(o.y + '|' + o.t) && (!numeracao || rodape)) || (rodape && /^\d{1,4}$/.test(o.t) && (+o.t === p || +o.t === p - 1)) || /estrategiaconcursos\.com\.br/i.test(o.t) || CPF.test(o.t) || COD.test(o.t) || MARCA.test(o.t));
-    if (!fora) out += o.s;
+    if (!fora(o, viz, p)) out += o.s;
     if (o.eol) out += '\n';
   }
   return { texto: out.replace(/[ \t]+\n/g, '\n').replace(/\n{2,}/g, '\n'), nomes };
@@ -100,6 +103,35 @@ function normalizar(t) {
   for (let i = 0; i < t.length; i++) { const c = t[i].normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); if (/[a-z0-9]/.test(c)) { n += c; pos.push(i); } }
   return { n, pos };
 }
+// região da questão nas páginas, para mostrar o recorte do próprio PDF (com figura e formatação): acha o começo e o fim do texto
+// devolvido por acharQuestao entre os pedaços de texto das páginas e devolve [{ p, y0, y1 }] em fração da altura (0 = topo)
+// e x0, x1 em fração da largura. O corte de baixo vai até o começo da próxima questão (pega figura depois do texto).
+export async function regiaoQuestao(doc, achado, { cache = new Map(), maxPag = 5 } = {}) {
+  if (!achado?.texto) return null;
+  const alvo = normalizar(achado.texto).n; if (alvo.length < 4) return null;
+  let fluxo = '', donos = []; const pags = [];
+  for (let p = achado.pag; p <= Math.min(doc.numPages, achado.pag + maxPag); p++) {
+    const its = await itens(doc, p, cache), viz = await vizinhos(doc, p, cache), H = its[0]?.H || 842;
+    const fo = its.filter(o => o.t && fora(o, viz, p)), dentro = its.filter(o => o.t && !fora(o, viz, p));
+    // faixas de cabeçalho e rodapé: o que foi tirado do texto lá em cima e lá embaixo (marca d'água, professor, número da página)
+    const topo = Math.max(H * 0.04, ...fo.filter(o => o.y > H * 0.88).map(o => H - o.y + 2)), pe = Math.max(H * 0.04, ...fo.filter(o => o.y < H * 0.12).map(o => o.y + o.h + 2));
+    pags.push({ p, H, topo, pe, dentro });
+    for (const o of dentro) { const n = normalizar(o.s).n; fluxo += n; for (let i = 0; i < n.length; i++) donos.push([pags.length - 1, o]); }
+  }
+  const ass = alvo.slice(0, 30), i0 = fluxo.indexOf(ass); if (i0 < 0 || donos[i0][0] !== 0) return null;
+  const fimAss = alvo.slice(-30), i1 = fluxo.indexOf(fimAss, i0 + Math.max(0, alvo.length - 30 - 40)); if (i1 < 0) return null;
+  const iFim = i1 + fimAss.length - 1, [pf, of] = donos[iFim], prox = donos.slice(iFim + 1).find(([k, o]) => k === pf && o.y < of.y - 1)?.[1];
+  const [, oi] = donos[i0], W = (await doc.getPage(achado.pag)).getViewport({ scale: 1 }).width;
+  const usados = new Set(donos.slice(i0, iFim + 1).map(d => d[1]));
+  const x0 = Math.max(0, Math.min(...[...usados].map(o => o.x)) - 8), x1 = Math.min(W, Math.max(...[...usados].map(o => o.x + o.w)) + 8);
+  const seg = [];
+  for (let k = 0; k <= pf; k++) {
+    const P = pags[k], y0 = k === 0 ? P.H - oi.y - oi.h * 1.15 : P.topo, y1 = k === pf ? (prox ? P.H - prox.y - prox.h * 1.1 : P.H - P.pe) : P.H - P.pe;
+    if (y1 > y0 + 2) seg.push({ p: P.p, y0: Math.max(0, y0 - 4) / P.H, y1: Math.min(P.H, y1 + 2) / P.H });
+  }
+  return seg.length ? { seg, x0: x0 / W, x1: x1 / W } : null;
+}
+
 // trecho do enunciado que identifica a questão: pula o começo (o cabeçalho da banca muda de formato entre lista e comentário)
 function assinatura(enun) { const { n } = normalizar(enun.slice(0, 600)); return n.length >= 110 ? n.slice(60, 110) : n.length >= 40 ? n.slice(-40) : null; }
 export async function acharComentario(doc, c, q, enun, { maxPag = 120, cache = new Map() } = {}) {

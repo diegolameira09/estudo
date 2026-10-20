@@ -1,5 +1,5 @@
 import * as pdfjs from './vendor/pdf.min.mjs';
-import { acharQuestao, acharComentario, limpar, textoPagina } from './extrair.js';
+import { acharQuestao, acharComentario, limpar, textoPagina, regiaoQuestao } from './extrair.js';
 import { lerGabarito } from './gabarito.js';
 import { PROVEDORES, MODELO_PADRAO, gerar, listarModelos, paraTudo } from './ia.js';
 pdfjs.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs';
@@ -160,7 +160,7 @@ function qGrid(n, key, it) {
       <button type="button" class="qc ${S.qChute ? 'on' : ''}" data-q="${sel}">chutei</button>${m[sel] ? `<button type="button" class="qz" data-q="${sel}" aria-label="Limpar a questão ${sel}">limpar</button>` : ''}</div>`;
     const info = sel != null && m[sel] ? res(sel) : ult != null ? res(ult) : '';
     return `<div class="qw" data-qn="${n}" data-qk="${key}"><div class="qg">${ns.map(q => `<button type="button" class="qb ${m[q] || ''} ${q === sel ? 'sel' : ''}" data-q="${q}" aria-label="Questão ${q}: ${QNOME[m[q] || '']}">${q}</button>`).join('')}</div>
-      ${linha}${info ? `<div class="small">${info}</div>` : ''}${ok + er ? `<div class="small mut">${ok} certa(s) · ${er} errada(s) ou chutada(s) · ${ns.length - ok - er} sem resposta</div>` : sel == null ? '<div class="small mut">Toque no número da questão e depois na letra que você marcou: o app corrige pelo gabarito do PDF.</div>' : ''}</div>`;
+      ${sel == null ? '' : `<div class="qv" data-qa="${esc(it.a)}" data-qs="${it.s}" data-q="${sel}"></div>`}${linha}${info ? `<div class="small">${info}</div>` : ''}${ok + er ? `<div class="small mut">${ok} certa(s) · ${er} errada(s) ou chutada(s) · ${ns.length - ok - er} sem resposta</div>` : sel == null ? '<div class="small mut">Toque no número da questão e depois na letra que você marcou: o app corrige pelo gabarito do PDF.</div>' : ''}</div>`;
   }
   // errada ou chutada: linha opcional para tocar a alternativa que marquei (vai para a IA como "marquei X")
   const linhas = ns.filter(q => m[q] === 'x' || m[q] === 'c').map(q => {
@@ -205,7 +205,7 @@ async function onQLimpa(b) {
 }
 function qRepaint(n, key) {
   const it = qItem(n, key); if (!it) return;
-  $$(`.qw[data-qn="${n}"][data-qk="${key}"]`).forEach(x => (x.outerHTML = qGrid(n, key, it)));
+  $$(`.qw[data-qn="${n}"][data-qk="${key}"]`).forEach(x => (x.outerHTML = qGrid(n, key, it))); qVer();
 }
 async function onQLetra(b) {
   const w = b.closest('.qw'), n = +w.dataset.qn, key = w.dataset.qk, e = S.erros.find(x => x.uid === qUid(n, key, +b.dataset.q)); if (!e) return;
@@ -238,6 +238,44 @@ async function onQGrid(b) {
   pp.upd = Date.now(); await saveProg(); await qErro(n, key, q, nx);
   qRepaint(n, key);
   const cb = $(`#view input[data-item="${key}"]`); if (cb && pp.items?.[+key]) { cb.checked = true; cb.closest('.item').classList.add('done'); }
+}
+/* ---------------- recorte da questão: ao tocar no número, a questão aparece na grade (sem abrir o PDF) ---------------- */
+// é um pedaço do próprio PDF (com figura e formatação), do começo da questão até o começo da próxima; o PDF continua a um toque.
+// QV guarda a promessa do recorte das últimas 12 questões vistas (redesenhar a grade não recorta de novo). Dentro do leitor não aparece.
+const QV = new Map();
+function qVer() { $$('.qv').forEach(el => { if (el.dataset.ok || el.closest('#vGrid')) return; el.dataset.ok = 1; mostraQv(el); }); }
+async function recorte(file, s, q, cssW) {
+  const X = await docX(file); if (!X) return null;
+  const en = await acharQuestao(X.doc, s || 1, q, { cache: X.cache }); if (!en) return null;
+  const R = await regiaoQuestao(X.doc, en, { cache: X.cache }); if (!R) return { pag: en.pag };
+  if (!document.createElement('canvas').getContext?.('2d')) return { pag: en.pag };   // sem canvas (teste no Deno): fica o botão do PDF
+  const dpr = Math.min(2, window.devicePixelRatio || 1), partes = [];
+  for (const g of R.seg.slice(0, 3)) {
+    const pg = await X.doc.getPage(g.p), w1 = pg.getViewport({ scale: 1 }).width, vp = pg.getViewport({ scale: Math.min(3, cssW * dpr / ((R.x1 - R.x0) * w1)) });
+    const c = document.createElement('canvas'); c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+    await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    partes.push({ c, sx: R.x0 * c.width, sy: g.y0 * c.height, sw: (R.x1 - R.x0) * c.width, sh: (g.y1 - g.y0) * c.height });
+  }
+  const out = document.createElement('canvas'), ctx = out.getContext('2d'); out.width = Math.ceil(partes[0].sw); out.height = Math.ceil(partes.reduce((t, x) => t + x.sh, 0) + (partes.length - 1) * 6);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, out.width, out.height); let y = 0;
+  for (const x of partes) { if (y) { ctx.fillStyle = '#CBD5E1'; ctx.fillRect(0, y + 2, out.width, 2); y += 6; } ctx.drawImage(x.c, x.sx, x.sy, x.sw, x.sh, 0, y, out.width, x.sh); y += x.sh; x.c.width = 0; }
+  return { c: out, pag: en.pag, mais: R.seg.length > 3 };
+}
+async function mostraQv(el) {
+  const { qa: a, qs, q } = el.dataset, A = aula(a), k = `${a}|${qs}|${q}`;
+  const pdf = pg => `<button type="button" class="chip" data-open="${esc(a)}" data-page="${pg}">Ver no PDF p. ${pg}</button>`;
+  if (!A || !S.pdfs.has(A.file)) return;
+  if (!QV.has(k)) {
+    const w = Math.max(280, Math.min(900, el.clientWidth || 600)); let feito = null;
+    QV.set(k, (xFila = xFila.then(async () => { feito = await recorte(A.file, +qs, +q, w); }).catch(err => console.warn('recorte', err))).then(() => feito));
+    if (QV.size > 12) QV.delete(QV.keys().next().value);
+  }
+  el.innerHTML = '<div class="small mut">Carregando a questão...</div>';
+  const r = await QV.get(k); if (!el.isConnected) return;
+  if (!r?.c) { el.innerHTML = `<div class="small mut">Não consegui recortar esta questão. ${pdf(r?.pag || +qs)}</div>`; return; }
+  const c = document.createElement('canvas'); c.width = r.c.width; c.height = r.c.height; c.getContext('2d').drawImage(r.c, 0, 0);
+  el.innerHTML = `<div class="qvi"></div><div class="row small mut">${pdf(r.pag)}<span>${r.mais ? 'A questão continua no PDF. ' : ''}Toque na imagem para ampliar.</span></div>`;
+  $('.qvi', el).append(c); c.onclick = () => el.classList.toggle('zoom');
 }
 /* ---------------- texto da questão extraído do PDF (offline), para a IA ---------------- */
 // cada erro guarda enun (enunciado), coment (comentário e gabarito), xt (quando extraiu) e xv (versão do PDF usada)
@@ -506,7 +544,7 @@ $('#tabs').addEventListener('click', e => { const b = e.target.closest('button')
 let diaRender = null;
 function render() {
   diaRender = todayISO(); paintTop();
-  ({ sessao: renderSessao, erros: renderErros, crono: renderCrono, mais: renderMais })[S.tab]();
+  ({ sessao: renderSessao, erros: renderErros, crono: renderCrono, mais: renderMais })[S.tab](); qVer();
 }
 
 /* ---------------- render: sessão ---------------- */
