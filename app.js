@@ -48,7 +48,7 @@ const pdfGet = k => run('pdfs', 'readonly', s => s.get(k));
 const pdfKeys = () => run('pdfs', 'readonly', s => s.getAllKeys());
 
 /* ---------------- estado ---------------- */
-const S = { C: null, pv: {}, del: {}, prog: {}, set: { dias: [1, 2, 3, 4, 5], durs: [20, 5, 20, 3] }, erros: [], pdfs: new Set(), tab: 'sessao', viewN: null, lastBackup: null, filtro: { mat: '', st: 'todos' }, gab: {}, comTem: new Set(), ia: { prov: 'claude', keys: {}, models: {} } };
+const S = { C: null, pv: {}, del: {}, prog: {}, set: { dias: [1, 2, 3, 4, 5], durs: [20, 5, 20, 3] }, erros: [], pdfs: new Set(), tab: 'sessao', viewN: null, lastBackup: null, filtro: { mat: '', st: 'todos' }, rel: { g: 's', mat: '', ord: 'pior' }, gab: {}, comTem: new Set(), ia: { prov: 'claude', keys: {}, models: {} } };
 // mini-simulados são sessões virtuais 9001, 9002... guardadas no progresso (S.prog[n].sim = itens)
 const SIM0 = 9000;
 const sess = n => (n > SIM0 ? (S.prog[n]?.sim ? { n, m: 'SIM', k: 'C', it: S.prog[n].sim } : undefined) : S.C.sessoes[n - 1]);
@@ -350,16 +350,6 @@ function statsTopicos(ate = Infinity) {
 const REFORCO = 0.35;
 const reforcoDe = (it, st) => { const t = it.x && st[it.tp]; return t && t.r >= 3 && (t.r - t.ok) / t.r >= REFORCO ? t : null; };
 const pct = (a, b) => (b ? Math.round(100 * a / b) : 0);
-function painelDesempenho() {
-  const st = statsTopicos(), porMat = {};
-  for (const [tp, t] of Object.entries(st)) { const m = (porMat[tp.split('|')[0]] ??= { r: 0, ok: 0, tps: [] }); m.r += t.r; m.ok += t.ok; m.tps.push([tp, t]); }
-  if (!Object.keys(porMat).length) return `<div class="card"><h3>Desempenho</h3><p class="small mut">Responda as questões na grade das sessões: aqui aparece a taxa de acerto por matéria e os tópicos em que você mais erra.</p></div>`;
-  const tot = Object.values(porMat).reduce((a, m) => ({ r: a.r + m.r, ok: a.ok + m.ok }), { r: 0, ok: 0 });
-  return `<div class="card"><h3>Desempenho</h3><div class="small mut">${tot.r} questões respondidas · ${pct(tot.ok, tot.r)}% certas. Toque na matéria para ver os tópicos mais fracos.</div>` +
-    ORDEM.filter(sj => porMat[sj]).map(sj => { const m = porMat[sj], fracos = m.tps.filter(([, t]) => t.r >= 3).sort((a, b) => a[1].ok / a[1].r - b[1].ok / b[1].r).slice(0, 5);
-      return `<details class="desemp"><summary><span class="dnome">${esc(MAT(sj))}</span><span class="dbar"><i style="width:${pct(m.ok, m.r)}%"></i></span><span class="small">${pct(m.ok, m.r)}% de ${m.r}</span></summary>
-        <div class="small">${fracos.length ? fracos.map(([tp, t]) => `<div class="row"><span class="sp">${esc(S.C.tps?.[tp] || tp)}</span><span class="${t.ok / t.r < 1 - REFORCO ? 'bad' : 'mut'}">${pct(t.ok, t.r)}% de ${t.r}</span></div>`).join('') : '<span class="mut">Ainda poucas questões por tópico (mínimo 3).</span>'}</div></details>`; }).join('') + `</div>`;
-}
 
 /* ---------------- artigo citado no gabarito: abrir a lei seca na página dele ---------------- */
 // aula de questões/fixação tem .lei (a lei seca); a lei tem .arts = [[artigo, página, lei dentro do PDF]]
@@ -544,7 +534,7 @@ $('#tabs').addEventListener('click', e => { const b = e.target.closest('button')
 let diaRender = null;
 function render() {
   diaRender = todayISO(); paintTop();
-  ({ sessao: renderSessao, erros: renderErros, crono: renderCrono, mais: renderMais })[S.tab](); qVer();
+  ({ sessao: renderSessao, erros: renderErros, crono: renderCrono, rel: renderRel, mais: renderMais })[S.tab](); qVer();
 }
 
 /* ---------------- render: sessão ---------------- */
@@ -731,7 +721,7 @@ function renderErros() {
   if (st === 'refazer') L = L.filter(e => status(e) === 'Refazer');
   if (st === 'pendente') L = L.filter(e => status(e) === 'Pendente');
   const nCart = S.erros.filter(e => e.regra).length;
-  let h = painelDesempenho() + `<div class="row" style="margin-bottom:10px"><h2 class="sp">Caderno de erros</h2><button class="btn" id="eCart">Cartões (${nCart})</button><button class="btn pri" id="eNew">+ Novo</button></div>
+  let h = `<div class="row" style="margin-bottom:10px"><h2 class="sp">Caderno de erros</h2><button class="btn" id="eCart">Cartões (${nCart})</button><button class="btn pri" id="eNew">+ Novo</button></div>
   <div class="card"><select id="eMat"><option value="">Todas as matérias</option>${ORDEM.map(m => `<option value="${m}" ${m === mat ? 'selected' : ''}>${esc(MAT(m))}</option>`).join('')}</select>
   <div class="row wrap" style="margin-top:8px" id="eSt">${[['todos', 'Todos'], ['semregra', 'Sem regra'], ['pendente', 'Pendentes'], ['refazer', 'Refazer']].map(([k, l]) => `<button class="chip ${st === k ? 'on' : ''}" data-st="${k}">${l}</button>`).join('')}</div>
   <div class="small mut" style="margin-top:8px">${L.length} de ${S.erros.length} erros</div></div>`;
@@ -747,6 +737,74 @@ function renderErros() {
     const c = ev.target.closest('[data-st]'); if (c) { S.filtro.st = c.dataset.st; render(); return; }
     const li = ev.target.closest('.li'); if (li) errForm(S.erros.find(x => x.id === +li.dataset.id));
   };
+}
+
+/* ---------------- render: relatório (quanto estudei e como estou indo) ---------------- */
+// tudo sai do que o app já guarda: sessões feitas (prog.done/date) e marcas da grade (prog.qm). Não conta tempo, de propósito.
+// questão sem data própria: vale a data da sessão (feita) ou a da última marcação nela (prog.upd)
+const POUCO = 10, CORTE = 50;   // menos de 10 questões: "poucos dados"; 50% é o mínimo dos blocos eliminatórios
+const segunda = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+const cicloDe = s => +(/ciclo (\d+)/.exec(s.it?.find(it => it.ti)?.ti || '')?.[1] || 0);
+const totQ = t => t.o + t.x + t.c;
+function dadosRel() {
+  const mat = {}, tps = {}, sem = new Map(), hoje = segunda(new Date()), M = k => (mat[k] ??= { o: 0, x: 0, c: 0, ses: 0, feitas: 0, ciclos: {} }), ordTp = Object.keys(S.C.tps || {});
+  for (let k = 7; k >= 0; k--) { const d = new Date(hoje); d.setDate(d.getDate() - 7 * k); sem.set(iso(d), { s: 0, q: 0 }); }
+  const semDe = isoD => isoD && sem.get(iso(segunda(parseISO(isoD))));
+  for (const s of S.C.sessoes) if (s.k === 'C') { const m = M(s.m), c = cicloDe(s), f = !!S.prog[s.n]?.done; m.ses++; if (f) m.feitas++; const cc = (m.ciclos[c] ??= { t: 0, f: 0 }); cc.t++; if (f) cc.f++; }
+  let resp = 0;
+  for (const [nk, pp] of Object.entries(S.prog)) {
+    const n = +nk, dia = pp.done && pp.date ? pp.date : pp.upd ? iso(new Date(pp.upd)) : null;
+    if (pp.done && n <= SIM0) { const w = semDe(pp.date); if (w) w.s++; }
+    for (const [key, marcas] of Object.entries(pp.qm || {})) {
+      const it = qItem(n, key), sj = aula(it?.a)?.sj; if (!sj) continue;
+      for (const v of Object.values(marcas)) {
+        if (!'oxc'.includes(v)) continue; resp++; M(sj)[v]++; const w = semDe(dia); if (w) w.q++;
+        if (it.tp && n <= SIM0) (tps[it.tp] ??= { o: 0, x: 0, c: 0, ord: ordTp.indexOf(it.tp) })[v]++;
+      }
+    }
+  }
+  return { mat, tps, sem, resp };
+}
+function barrasSemana(sem, campo) {
+  const L = [...sem.entries()], mx = Math.max(1, ...L.map(([, v]) => v[campo])), nome = campo === 's' ? 'sessões' : 'questões';
+  return `<div class="rsem" role="img" aria-label="${nome} por semana nas últimas 8 semanas">${L.map(([d, v], i) => `<div class="rcol" title="Semana de ${br(d)}: ${v[campo]} ${nome}">
+    <span class="small">${v[campo] || ''}</span><i style="height:${Math.round(100 * v[campo] / mx)}%"></i><span class="small mut">${i === L.length - 1 ? 'esta' : br(d).slice(0, 5)}</span></div>`).join('')}</div>`;
+}
+function renderRel() {
+  const R = dadosRel(), feitas = doneCount(), ff = S.rel;
+  let h = `<div class="card"><h3>Quanto estudei</h3><div class="rnum"><div><b>${feitas}</b><span class="small mut">de ${total()} sessões (${pct(feitas, total())}%)</span></div>
+    <div><b>${R.resp}</b><span class="small mut">questões respondidas</span></div><div><b>${S.erros.length}</b><span class="small mut">erros no caderno</span></div></div>
+    <div class="row" style="margin-top:12px"><span class="sp small"><b>Por semana</b> (últimas 8)</span>${[['s', 'Sessões'], ['q', 'Questões']].map(([k, l]) => `<button class="chip ${ff.g === k ? 'on' : ''}" data-rg="${k}">${l}</button>`).join('')}</div>
+    ${barrasSemana(R.sem, ff.g)}
+    <div class="small" style="margin-top:12px"><b>Sessões por matéria</b> <span class="mut">(e o ciclo em que você está)</span></div>` +
+    ORDEM.filter(sj => R.mat[sj]?.ses).map(sj => {
+      const m = R.mat[sj], cs = Object.keys(m.ciclos).map(Number).sort((a, b) => a - b), at = cs.find(c => m.ciclos[c].f < m.ciclos[c].t) ?? cs[cs.length - 1], ca = m.ciclos[at];
+      return `<div class="rrow" title="${esc(MAT(sj))}: ${m.feitas} de ${m.ses} sessões"><span class="dnome">${esc(MAT(sj))}</span><span class="dbar"><i style="width:${pct(m.feitas, m.ses)}%"></i></span>
+        <span class="small rval">${m.feitas}/${m.ses}${at ? ` · ciclo ${at} de ${cs.length}: ${pct(ca.f, ca.t)}%` : ''}</span></div>`;
+    }).join('') + `</div>`;
+  // acerto por matéria: certas / respondidas; chute fica à parte (chute que acertou não conta como acerto)
+  const comQ = ORDEM.filter(sj => R.mat[sj] && totQ(R.mat[sj]));
+  const tot = comQ.reduce((a, sj) => ({ o: a.o + R.mat[sj].o, x: a.x + R.mat[sj].x, c: a.c + R.mat[sj].c }), { o: 0, x: 0, c: 0 });
+  const fx = (t, curto) => {
+    const n = totQ(t); if (n < POUCO) return `<span class="mut">poucos dados (${n})</span>`; const p = pct(t.o, n);
+    return `<span class="${p < CORTE ? 'bad' : ''}">${p < CORTE ? '⚠ ' : ''}${p}%</span>${curto ? '' : ` <span class="mut">certas · ${pct(t.x, n)}% erradas · ${pct(t.c, n)}% chute · ${n} questões</span>`}`;
+  };
+  h += `<div class="card"><h3>Acerto por matéria</h3>${comQ.length ? `<div class="small mut">No total: ${fx(tot)}. A marca na barra é o mínimo de ${CORTE}% dos blocos eliminatórios. Chute não conta como acerto, mesmo quando acertou.</div>` +
+    comQ.map(sj => { const t = R.mat[sj], n = totQ(t);
+      return `<div class="rrow2" title="${esc(MAT(sj))}: ${t.o} certas, ${t.x} erradas, ${t.c} chutadas"><div class="row"><span class="dnome">${esc(MAT(sj))}</span><span class="dbar rcorte ${n < POUCO ? 'pouco' : ''}"><i style="width:${pct(t.o, n)}%"></i></span></div>
+        <div class="small">${fx(t)}</div></div>`; }).join('')
+    : '<p class="small mut">Responda as questões na grade das sessões: aqui aparece a taxa de acerto por matéria.</p>'}</div>`;
+  // tópicos: só das sessões de conteúdo (cada trecho de lei ou tema tem um tópico)
+  const T = Object.entries(R.tps).filter(([tp]) => !ff.mat || tp.split('|')[0] === ff.mat);
+  const taxa = ([, t]) => (totQ(t) < POUCO ? 2 : t.o / totQ(t));
+  T.sort(ff.ord === 'mais' ? (a, b) => totQ(b[1]) - totQ(a[1]) : ff.ord === 'crono' ? (a, b) => a[1].ord - b[1].ord : (a, b) => taxa(a) - taxa(b) || totQ(b[1]) - totQ(a[1]));
+  h += `<div class="card"><h3>Acerto por tópico</h3><select id="rMat"><option value="">Todas as matérias</option>${ORDEM.filter(sj => Object.keys(R.tps).some(tp => tp.startsWith(sj + '|'))).map(sj => `<option value="${sj}" ${sj === ff.mat ? 'selected' : ''}>${esc(MAT(sj))}</option>`).join('')}</select>
+    <div class="row wrap" style="margin-top:8px">${[['pior', 'Pior acerto'], ['mais', 'Mais questões'], ['crono', 'Ordem do cronograma']].map(([k, l]) => `<button class="chip ${ff.ord === k ? 'on' : ''}" data-ro="${k}">${l}</button>`).join('')}</div>
+    ${T.length ? `<div class="rtab"><table><thead><tr><th>Tópico</th><th>Certas</th><th>Erradas</th><th>Chute</th><th>Acerto</th></tr></thead><tbody>${T.map(([tp, t]) => `<tr><td>${esc(S.C.tps?.[tp] || tp)}</td><td>${t.o}</td><td>${t.x}</td><td>${t.c}</td><td>${fx(t, true)}</td></tr>`).join('')}</tbody></table></div>
+      <div class="small mut" style="margin-top:6px">Com menos de ${POUCO} questões a taxa ainda engana: aparece "poucos dados".</div>` : '<p class="small mut">Nenhuma questão respondida nos tópicos desta matéria.</p>'}</div>`;
+  const v = $('#view'); v.innerHTML = h;
+  v.onclick = ev => { const g = ev.target.closest('[data-rg]'), o = ev.target.closest('[data-ro]'); if (g) { ff.g = g.dataset.rg; render(); } if (o) { ff.ord = o.dataset.ro; render(); } };
+  v.onchange = ev => { if (ev.target.id === 'rMat') { ff.mat = ev.target.value; render(); } };
 }
 
 /* ---------------- render: cronograma ---------------- */
