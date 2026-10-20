@@ -298,8 +298,8 @@ function itemDoErro(e) {
   for (const s of S.C.sessoes) for (const it of [...(s.it || []), ...(s.ev || [])])
     if (it.t !== 'T' && it.a === e.aula && q >= it.q[0] && q <= it.q[1] && it.s <= pg && (!best || it.s > best.s)) best = it;
   return best;
-}
-// também refaz quando o PDF importado mudou de versão desde a extração (o Estratégia atualizou a redação)
+}
+// também refaz quando o PDF importado mudou de versão desde a extração (a fonte do material, Alvo no TJ, atualizou a redação)
 const podeExtrair = e => { const A = aula(e.aula), pv = A && S.pv[A.file]; return !!A && S.pdfs.has(A.file) && !!digits(e.questao) && (!e.xt || !!(pv && e.xv && e.xv !== pv)); };
 async function extrairErro(e0) {
   const e = S.erros.find(x => x.uid === e0.uid) || e0, A = aula(e.aula), q = +digits(e.questao);
