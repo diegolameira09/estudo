@@ -330,7 +330,9 @@ function artigoDe(aKey, ref) {
   // "Art. 1.015" (milhar com ponto) = artigo 1015
   const m = /Art(?:igo)?s?\.?\s*(\d{1,2}\.\d{3}|\d{1,4})\s*[º°o]?\s*(?:-\s*([A-Z])\b)?/i.exec(ref); if (!m) return null;
   const art = String(+m[1].replace('.', '')) + (m[2] ? '-' + m[2].toUpperCase() : ''), lei = /12\.?153/.test(ref) ? 2 : /9\.?099/.test(ref) ? 1 : 0;
-  const e = L.arts.find(x => x[0] === art && x[2] === lei) || L.arts.find(x => x[0] === art);
+  const acha = a => L.arts.find(x => x[0] === a && x[2] === lei) || L.arts.find(x => x[0] === a);
+  // artigo com letra que não aparece como título na lei seca (ex.: 29-A só citado em outro artigo): abre o artigo-base, que fica ao lado
+  const e = acha(art) || (art.includes('-') && acha(art.split('-')[0]));
   return e ? { a: A.lei, p: e[1], art } : null;
 }
 const artigoErro = e => artigoDe(e.aula, S.gab[aula(e.aula)?.file]?.g?.[+digits(e.questao)]?.ref || e.coment || e.regra);
