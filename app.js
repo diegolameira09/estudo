@@ -1,5 +1,5 @@
 import * as pdfjs from './vendor/pdf.min.mjs';
-import { acharQuestao, acharComentario, limpar } from './extrair.js';
+import { acharQuestao, acharComentario, limpar, textoPagina } from './extrair.js';
 import { lerGabarito } from './gabarito.js';
 import { PROVEDORES, MODELO_PADRAO, gerar, listarModelos, paraTudo } from './ia.js';
 pdfjs.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs';
@@ -48,7 +48,7 @@ const pdfGet = k => run('pdfs', 'readonly', s => s.get(k));
 const pdfKeys = () => run('pdfs', 'readonly', s => s.getAllKeys());
 
 /* ---------------- estado ---------------- */
-const S = { C: null, pv: {}, del: {}, prog: {}, set: { dias: [1, 2, 3, 4, 5], durs: [20, 5, 20, 3] }, erros: [], pdfs: new Set(), tab: 'sessao', viewN: null, lastBackup: null, filtro: { mat: '', st: 'todos' }, gab: {}, ia: { prov: 'claude', keys: {}, models: {} } };
+const S = { C: null, pv: {}, del: {}, prog: {}, set: { dias: [1, 2, 3, 4, 5], durs: [20, 5, 20, 3] }, erros: [], pdfs: new Set(), tab: 'sessao', viewN: null, lastBackup: null, filtro: { mat: '', st: 'todos' }, gab: {}, comTem: new Set(), ia: { prov: 'claude', keys: {}, models: {} } };
 // mini-simulados são sessões virtuais 9001, 9002... guardadas no progresso (S.prog[n].sim = itens)
 const SIM0 = 9000;
 const sess = n => (n > SIM0 ? (S.prog[n]?.sim ? { n, m: 'SIM', k: 'C', it: S.prog[n].sim } : undefined) : S.C.sessoes[n - 1]);
@@ -155,7 +155,7 @@ function qGrid(n, key, it) {
   if (!G && (A?.v === 'F' || A?.v === 'Q')) lerGab(A.file);
   if (G) {
     const qa = S.prog[n]?.qa?.[key] || {}, sel = S.qSel?.n === n && S.qSel?.key === key ? S.qSel.q : null, ult = S.qUlt?.n === n && S.qUlt?.key === key ? S.qUlt.q : null;
-    const res = q => (qa[q] && G[q] ? `q.${q}: você ${qa[q]}, gabarito ${G[q].r} ${m[q] === 'o' ? '<b class="good">✓</b>' : '<b class="bad">✗</b>'}${m[q] === 'c' ? ' (chute)' : ''} ${m[q] !== 'o' ? botaoArt(artigoDe(it.a, G[q].ref)) : ''}` : '');
+    const res = q => (qa[q] && G[q] ? `q.${q}: você ${qa[q]}, gabarito ${G[q].r} ${m[q] === 'o' ? '<b class="good">✓</b>' : '<b class="bad">✗</b>'}${m[q] === 'c' ? ' (chute)' : ''} ${m[q] !== 'o' ? botaoArt(artigoDe(it.a, G[q].ref)) : ''} ${botaoCom(it.a, q, `data-q="${q}"`)}` : '');
     const linha = sel == null ? '' : `<div class="qr"><span class="small"><b>q.${sel}</b></span>${letrasGab(G, sel).map(l => `<button type="button" class="qa ${qa[sel] === l ? 'on' : ''}" data-q="${sel}" data-l="${l}">${l}</button>`).join('')}
       <button type="button" class="qc ${S.qChute ? 'on' : ''}" data-q="${sel}">chutei</button>${m[sel] ? `<button type="button" class="qz" data-q="${sel}" aria-label="Limpar a questão ${sel}">limpar</button>` : ''}</div>`;
     const info = sel != null && m[sel] ? res(sel) : ult != null ? res(ult) : '';
@@ -338,6 +338,72 @@ function artigoDe(aKey, ref) {
 const artigoErro = e => artigoDe(e.aula, S.gab[aula(e.aula)?.file]?.g?.[+digits(e.questao)]?.ref || e.coment || e.regra);
 const botaoArt = x => (x ? `<button type="button" class="chip" data-open="${esc(x.a)}" data-page="${x.p}">Ler art. ${esc(x.art)}</button>` : '');
 
+/* ---------------- comentário da questão pela IA (sob demanda, um toque = um comentário) ---------------- */
+// guardado no aparelho em kv 'com|arquivo|questão' (S.comTem lista os que existem); se a questão virou erro, vai também em e.iaCom (sincroniza)
+const PROMPT_COM = `Você comenta questões do concurso de Escrevente Técnico Judiciário do TJ-SP (banca VUNESP) para um aluno que acabou de resolvê-las.
+Escreva em português, direto, em no máximo 150 palavras, sem títulos e sem markdown:
+1. Por que o gabarito oficial está correto (nas de Verdadeiro ou Falso: o que torna a afirmação verdadeira ou falsa).
+2. Nas de múltipla escolha, o erro de cada alternativa incorreta, em uma linha cada.
+3. Se o aluno errou, onde provavelmente está a confusão dele.
+Regras: quando vier o texto da lei, ele é a fonte principal; cite o artigo e a lei (ex.: "art. 339, CP"). Não troque o gabarito; se ele parecer errado, diga "gabarito suspeito" e o motivo. Se a questão depende de figura, tabela ou texto que não veio, diga isso em vez de adivinhar.`;
+const comChave = (file, q) => `${file}|${q}`;
+// texto do artigo na lei seca: do "Art. N" até o próximo artigo (páginas p a p+2)
+async function textoArtigo(x) {
+  const X = await docX(aula(x.a).file); if (!X) return '';
+  const [num, suf] = x.art.split('-'), n = +num, alvo = n >= 1000 ? `${Math.floor(n / 1000)}\\.?${String(n % 1000).padStart(3, '0')}` : String(n);
+  // "Art. 293 - Falsificar" e "Artigo 45 - O funcionário" são o 293 e o 45; "Art. 293-A" (letra colada ao número) e "Art. 2930" não
+  const ini = new RegExp(`(?:^|\\n)[^\\n]{0,80}?Art(?:igo)?\\.?\\s*${alvo}${suf ? `[º°o]?-${suf}\\b` : '(?!\\d|\\.\\d|[º°o]?-[A-Z]\\b)'}`);
+  let txt = ''; const nomes = new Set();
+  for (let p = x.p; p <= Math.min(X.doc.numPages, x.p + 2); p++) { const r = await textoPagina(X.doc, p, X.cache); r.nomes.forEach(v => nomes.add(v)); txt += r.texto + '\n'; }
+  const m = ini.exec(txt); if (!m) return suf ? textoArtigo({ ...x, art: num }) : ''; // 29-A que não é título: texto do 29
+  const resto = txt.slice(m.index + m[0].length), fim = /\n[^\n]{0,80}?Art(?:igo)?\.?\s*\d/.exec(resto);
+  return limpar(txt.slice(m.index, m.index + m[0].length + (fim ? fim.index : 2500)), [...nomes]).slice(0, 3000);
+}
+async function dadosComentario(aKey, s, q) {
+  const A = aula(aKey), X = await docX(A.file); if (!X) return null;
+  const en = await acharQuestao(X.doc, s || 1, q, { cache: X.cache }), nomes = [...(en?.nomes || [])];
+  const enun = en && !/^\s*0*\d{1,4}\s*[-–)]\s*(Verdadeiro|Falso|[A-E])\s*[/.\-–]/.test(en.texto) ? limpar(en.texto, nomes) : '';
+  const G = S.gab[A.file]?.g?.[q], x = G && artigoDe(aKey, G.ref);
+  return { enun, gab: G?.r, ref: G?.ref ? limpar(G.ref, nomes) : '', lei: x ? await textoArtigo(x) : '', leiNome: x ? `art. ${x.art}, ${aula(x.a).lab}` : '' };
+}
+function mostraCom(A, q, c) {
+  const f = $('#dlgForm');
+  f.innerHTML = `<h3>Comentário · questão ${q}</h3><div class="small mut">${esc(MAT(A.sj))} · ${esc(A.lab)}${c.por ? ' · ' + esc(c.por.split(':')[1] || c.por) : ''}</div>
+    <div class="xtxt" style="margin-top:8px">${esc(c.t)}</div>
+    <div class="row" style="margin-top:12px"><span class="sp"></span><button type="button" class="btn pri" id="cmOk">Fechar</button></div>`;
+  $('#cmOk', f).onclick = () => $('#dlg').close(); $('#dlg').showModal();
+}
+async function comentar(aKey, s, q, minha) {
+  const A = aula(aKey); if (!A) return;
+  const e = S.erros.find(x => x.aula === aKey && digits(x.questao) === String(q));
+  let c = (await kvGet('com|' + comChave(A.file, q))) || (e?.iaCom ? { t: e.iaCom } : null);
+  if (c?.t) return mostraCom(A, q, c);
+  const cfg = iaCfg();
+  if (!cfg.key) return toast('Cadastre a chave da IA em Mais › IA para comentar questões.', 4000);
+  if (navigator.onLine === false) return toast('Sem internet: o comentário precisa da IA.');
+  if (!S.pdfs.has(A.file)) return toast('Importe o PDF desta questão em Mais › PDFs.');
+  toast('Comentando a questão...', 15000);
+  let d = null; xFila = xFila.then(async () => { d = await dadosComentario(aKey, s, q); }).catch(err => console.warn('comentário', err)); await xFila;
+  if (!d?.enun) return toast('Não achei o texto desta questão no PDF.');
+  const G = v => (v === 'V' ? 'Verdadeiro' : v === 'F' ? 'Falso' : v || '?');
+  const user = [`Matéria: ${MAT(A.sj)} · ${A.lab} · questão ${q}`, `Questão:\n${d.enun}`, `Gabarito oficial: ${G(d.gab)}${d.ref ? ' (' + d.ref + ')' : ''}`,
+    minha ? `Resposta do aluno: ${G(minha)}` : '', d.lei ? `Texto da lei (${d.leiNome}):\n${d.lei}` : ''].filter(Boolean).join('\n\n');
+  try {
+    const t = (await gerar(cfg, PROMPT_COM, user)).trim(); if (!t) throw new Error('A IA não devolveu texto.');
+    c = { t, em: Date.now(), por: `${cfg.prov}:${cfg.model}` }; await kvSet('com|' + comChave(A.file, q), c); S.comTem.add(comChave(A.file, q));
+    if (e) { e.iaCom = t; e.upd = Date.now(); await errPut(e); }
+    $('#toast').hidden = true; mostraCom(A, q, c);
+    $$('.qw').forEach(w => { const it = qItem(+w.dataset.qn, w.dataset.qk); if (it?.a === aKey) qRepaint(+w.dataset.qn, w.dataset.qk); });
+  } catch (err) { toast(err.message || String(err), 6000); }
+}
+const botaoCom = (aKey, q, attrs) => { const A = aula(aKey); if (!A) return ''; const tem = S.comTem.has(comChave(A.file, q)) || S.erros.some(x => x.aula === aKey && digits(x.questao) === String(q) && x.iaCom);
+  return `<button type="button" class="chip qcm" ${attrs}>${tem ? 'Ver comentário' : 'Comentar'}</button>`; };
+function onQCom(b) {
+  if (b.dataset.erro) { const e = S.erros.find(x => x.id === +b.dataset.erro); if (e) comentar(e.aula, itemDoErro(e)?.s ?? +e.pagina, +digits(e.questao), e.minha); return; }
+  const w = b.closest('.qw'), n = +w.dataset.qn, key = w.dataset.qk, q = +b.dataset.q, it = qItem(n, key);
+  comentar(it.a, it.s, q, S.prog[n]?.qa?.[key]?.[q]);
+}
+
 /* ---------------- cartões da "Regra correta" (revisão rápida, offline) ---------------- */
 // ordem: nunca vistos, depois os que você não lembrou, depois os mais antigos; e.cartao = { ok, n, em }
 function cartoes() {
@@ -513,6 +579,7 @@ function revList(list, key, titulo) {
   return `<div class="aulah">${titulo} (${list.length})</div>` + list.map(e => `<div class="item"><span></span><div>
     <div class="txt small">${errLine(e)}</div><div class="small mut">${esc(e.assunto || e.porque || '')}</div>
     <div class="acts"><button class="chip" data-open="${esc(e.aula)}" data-page="${esc(e.pagina)}">Abrir p. ${esc(e.pagina)}</button>${botaoArt(artigoErro(e))}
+    ${botaoCom(e.aula, digits(e.questao), `data-erro="${e.id}"`)}
     <button class="chip ${e[key] === 'Acertei' ? 'on' : ''}" data-res="${e.id}" data-k="${key}" data-v="Acertei">Acertei</button>
     <button class="chip ${e[key] === 'Errei' ? 'on' : ''}" data-res="${e.id}" data-k="${key}" data-v="Errei">Errei</button></div></div></div>`).join('');
 }
@@ -534,6 +601,7 @@ async function onSessaoClick(e) {
   if (b.classList.contains('qa')) return onQResp(b);
   if (b.classList.contains('qc')) return onQChute(b);
   if (b.classList.contains('qz')) return onQLimpa(b);
+  if (b.classList.contains('qcm')) return onQCom(b);
   const n = S.viewN ?? curN();
   if (b.dataset.nav) { S.viewN = Math.min(total(), Math.max(1, n + +b.dataset.nav)); render(); return; }
   if (b.dataset.goto) { S.viewN = null; render(); return; }
@@ -588,6 +656,7 @@ function errForm(pre = {}) {
   <div class="grid2"><div><label>Resultado rev. 1</label><select id="fR1">${['', 'Acertei', 'Errei'].map(v => `<option ${e.r1 === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
   <div><label>Resultado rev. 2</label><select id="fR2">${['', 'Acertei', 'Errei'].map(v => `<option ${e.r2 === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>
   </details>
+  ${e.iaCom ? `<details><summary class="small mut">Comentário da IA</summary><div class="xtxt small">${esc(e.iaCom)}</div></details>` : ''}
   ${e.enun ? `<details><summary class="small mut">Texto extraído do PDF (vai para a IA)</summary><div class="xtxt small">${esc(e.enun)}${e.coment ? '\n\n' + esc(e.coment) : '\n\n(comentário não encontrado: a IA explica sem ele)'}</div></details>`
     : e.xt ? `<div class="small warn" style="margin-top:8px">Não achei esta questão no PDF. Confira página e número.</div>` : ''}
   ${e.ia?.st === 'falhou' && !e.regra ? `<div class="small warn" style="margin-top:8px">Geração pela IA falhou: ${esc(e.ia.msg)}. Volta na próxima vez que você tocar em Gerar.</div>` : ''}
@@ -1107,6 +1176,7 @@ function paintVGrid() {
 }
 $('#vQ').onclick = () => { $('#vGrid').hidden = !$('#vGrid').hidden; paintVGrid(); };
 $('#vGrid').onclick = e => { const o = e.target.closest('[data-open]'); if (o) return openPDF(o.dataset.open, +o.dataset.page, { sess: V.ctx?.sess, jumps: [] });
+  const cm = e.target.closest('.qcm'); if (cm) return onQCom(cm);
   const b = e.target.closest('.qb, .ql, .qa, .qc, .qz'); if (!b) return; const c = b.classList; c.contains('ql') ? onQLetra(b) : c.contains('qa') ? onQResp(b) : c.contains('qc') ? onQChute(b) : c.contains('qz') ? onQLimpa(b) : onQGrid(b); };
 $('#vErr').onclick = () => errForm({ sessao: V.ctx?.sess || curN() || total(), aula: V.aula, pagina: String(V.cur) });
 let rsz; window.addEventListener('resize', () => { if ($('#viewer').hidden || !V.doc) return; clearTimeout(rsz); rsz = setTimeout(async () => { const p = V.cur; await layout(); goPage(p); }, 250); });
@@ -1478,6 +1548,7 @@ async function init() {
   S.pdfs = new Set(await pdfKeys());
   { const ks = await run('kv', 'readonly', s => s.getAllKeys(IDBKeyRange.bound('pv|', 'pv|\uffff'))); const vs = await run('kv', 'readonly', s => s.getAll(IDBKeyRange.bound('pv|', 'pv|\uffff'))); ks.forEach((k, i) => (S.pv[k.slice(3)] = vs[i])); }
   { const r = IDBKeyRange.bound('gab|', 'gab|￿'), ks = await run('kv', 'readonly', s => s.getAllKeys(r)), vs = await run('kv', 'readonly', s => s.getAll(r)); ks.forEach((k, i) => (S.gab[k.slice(4)] = vs[i])); }
+  { const r = IDBKeyRange.bound('com|', 'com|￿'); (await run('kv', 'readonly', s => s.getAllKeys(r))).forEach(k => S.comTem.add(k.slice(4))); }
   S.lastBackup = (await kvGet('lastBackup')) || null;
   S.ia = { ...S.ia, ...((await kvGet('ia')) || {}) };
   S.set.device ||= devPadrao(); S.lastSync = (await kvGet('lastSync')) || null; S.syncDirty = true;
