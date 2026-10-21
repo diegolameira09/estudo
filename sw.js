@@ -1,4 +1,4 @@
-const VERSAO = 'estudo-tjsp-v15';
+const VERSAO = 'estudo-tjsp-v16';
 const ARQUIVOS = [
 "./",
 "index.html",
@@ -13,6 +13,7 @@ const ARQUIVOS = [
 "icons/icon-192.png",
 "icons/icon-512.png",
 "icons/icon-512-maskable.png",
+"icons/apple-180.png",
 "vendor/pdf.min.mjs",
 "vendor/pdf.worker.min.mjs",
 "vendor/standard_fonts/FoxitDingbats.pfb",
