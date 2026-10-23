@@ -370,11 +370,11 @@ const botaoArt = x => (x ? `<button type="button" class="chip" data-open="${esc(
 /* ---------------- comentário da questão pela IA (sob demanda, um toque = um comentário) ---------------- */
 // guardado no aparelho em kv 'com|arquivo|questão' (S.comTem lista os que existem); se a questão virou erro, vai também em e.iaCom (sincroniza)
 const PROMPT_COM = `Você comenta questões do concurso de Escrevente Técnico Judiciário do TJ-SP (banca VUNESP) para um aluno que acabou de resolvê-las.
-Escreva em português, direto, em no máximo 150 palavras, sem títulos e sem markdown:
+Escreva em português, direto, em no máximo 200 palavras, sem títulos e sem markdown:
 1. Por que o gabarito oficial está correto (nas de Verdadeiro ou Falso: o que torna a afirmação verdadeira ou falsa).
 2. Nas de múltipla escolha, o erro de cada alternativa incorreta, em uma linha cada.
 3. Se o aluno errou, onde provavelmente está a confusão dele.
-Regras: quando vier o texto da lei, ele é a fonte principal; cite o artigo e a lei (ex.: "art. 339, CP"). Não troque o gabarito; se ele parecer errado, diga "gabarito suspeito" e o motivo. Se a questão depende de figura, tabela ou texto que não veio, diga isso em vez de adivinhar.`;
+Regras: quando vier o texto da lei, ele é a fonte principal; cite o artigo e a lei (ex.: "art. 339, CP"). O trecho da lei seca traz os artigos vizinhos: use-o para apontar, em cada alternativa errada, o artigo que ela contraria e o que ele diz de fato. Só diga que falta o artigo se ele realmente não estiver no texto enviado. Não troque o gabarito; se ele parecer errado, diga "gabarito suspeito" e o motivo. Se a questão depende de figura, tabela ou texto que não veio, diga isso em vez de adivinhar.`;
 const comChave = (file, q) => `${file}|${q}`;
 // texto do artigo na lei seca: do "Art. N" até o próximo artigo (páginas p a p+2)
 async function textoArtigo(x) {
@@ -393,23 +393,46 @@ async function dadosComentario(aKey, s, q) {
   const en = await acharQuestao(X.doc, s || 1, q, { cache: X.cache }), nomes = [...(en?.nomes || [])];
   const enun = en && !/^\s*0*\d{1,4}\s*[-–)]\s*(Verdadeiro|Falso|[A-E])\s*[/.\-–]/.test(en.texto) ? limpar(en.texto, nomes) : '';
   const G = S.gab[A.file]?.g?.[q], x = G && artigoDe(aKey, G.ref);
-  return { enun, gab: G?.r, ref: G?.ref ? limpar(G.ref, nomes) : '', lei: x ? await textoArtigo(x) : '', leiNome: x ? `art. ${x.art}, ${aula(x.a).lab}` : '' };
+  const lei = x ? await textoArtigo(x) : '', tr = await textoTrecho(aKey, s, x, lei);
+  return { enun, gab: G?.r, ref: G?.ref ? limpar(G.ref, nomes) : '', lei, leiNome: x ? `art. ${x.art}, ${aula(x.a).lab}` : '', ...tr };
 }
-function mostraCom(A, q, c) {
+// trecho da lei seca do tópico da questão (o que foi lido na sessão): as alternativas erradas costumam vir dos artigos vizinhos
+// ao citado no gabarito (às vezes no trecho anterior). Longo demais: a janela em volta do artigo citado.
+const TRECHO_MAX = 14000;
+async function textoTrecho(aKey, s, x, artTxt) {
+  const A = aula(aKey), L = A?.lei && aula(A.lei); if (!L) return {};
+  const it = S.C.sessoes.flatMap(z => [...(z.it || []), ...(z.ev || [])]).find(i => i.a === aKey && i.s === s && i.tp);
+  const T = it && S.C.sessoes.flatMap(z => z.it || []).find(i => i.t === 'T' && i.a === A.lei && i.tp === it.tp);
+  // páginas: em volta do artigo citado (uma antes e uma depois) e, se o tópico estiver perto, o tópico inteiro (até 8 páginas)
+  let [p0, p1] = x ? [Math.max(1, x.p - 1), x.p + 1] : T ? [T.p[0], T.p[1]] : [];
+  if (x && T && T.p[0] <= p1 + 1 && T.p[1] >= p0 - 1) [p0, p1] = [Math.min(p0, T.p[0]), Math.max(p1, T.p[1])];
+  if (p1 - p0 > 7) [p0, p1] = x ? [Math.max(p0, x.p - 3), Math.min(p1, x.p + 4)] : [p0, p0 + 7];
+  if (!p0) return {};
+  const X = await docX(L.file); if (!X) return {};
+  // limpa página por página (o limpar corta em 8.000 caracteres); os nomes da marca d'água valem para todas
+  const pags = [], nomes = new Set();
+  for (let p = p0; p <= Math.min(X.doc.numPages, p1); p++) { const r = await textoPagina(X.doc, p, X.cache); r.nomes.forEach(v => nomes.add(v)); pags.push(r.texto); }
+  let txt = pags.map(t => limpar(t, [...nomes])).join('\n');
+  if (txt.length > TRECHO_MAX) { const i = artTxt ? Math.max(0, txt.indexOf(artTxt.slice(0, 60))) : 0; const ini = Math.max(0, Math.min(i - TRECHO_MAX / 3, txt.length - TRECHO_MAX)); txt = txt.slice(ini, ini + TRECHO_MAX); }
+  return { trecho: txt, trechoNome: `${L.lab}, p. ${p0}${p1 > p0 ? ' a ' + p1 : ''}` };
+}
+function mostraCom(A, q, c, refazer) {
   const f = $('#dlgForm');
   f.innerHTML = `<h3>Comentário · questão ${q}</h3><div class="small mut">${esc(MAT(A.sj))} · ${esc(A.lab)}${c.por ? ' · ' + esc(c.por.split(':')[1] || c.por) : ''}</div>
     <div class="xtxt" style="margin-top:8px">${esc(c.t)}</div>
-    <div class="row" style="margin-top:12px"><span class="sp"></span><button type="button" class="btn pri" id="cmOk">Fechar</button></div>`;
-  $('#cmOk', f).onclick = () => $('#dlg').close(); $('#dlg').showModal();
+    <div class="row" style="margin-top:12px">${refazer ? '<button type="button" class="btn" id="cmDe">Gerar de novo</button>' : ''}<span class="sp"></span><button type="button" class="btn pri" id="cmOk">Fechar</button></div>`;
+  $('#cmOk', f).onclick = () => $('#dlg').close(); if (refazer) $('#cmDe', f).onclick = () => { $('#dlg').close(); refazer(); }; $('#dlg').showModal();
 }
-async function comentar(aKey, s, q, minha) {
+async function comentar(aKey, s, q, minha, novo = false) {
   const A = aula(aKey); if (!A) return;
   const e = S.erros.find(x => x.aula === aKey && digits(x.questao) === String(q));
   // comentário feito sobre outra versão do PDF (redação mudou) não vale: gera de novo
   const pv = S.pv[A.file], atual = v => !v || !pv || v === pv;
-  let c = await kvGet('com|' + comChave(A.file, q)); if (c && !atual(c.v)) c = null;
-  if (!c && e?.iaCom && atual(e.iaComV)) c = { t: e.iaCom };
-  if (c?.t) return mostraCom(A, q, c);
+  let c = novo ? null : await kvGet('com|' + comChave(A.file, q)); if (c && !atual(c.v)) c = null;
+  if (!c && !novo && e?.iaCom && atual(e.iaComV)) c = { t: e.iaCom };
+  // "Gerar de novo": comentário fraco ou de antes do trecho da lei (v18) pode ser refeito (custa outro pedido)
+  const refazer = () => { if (confirm('Gerar outro comentário desta questão? É um novo pedido à IA (cerca de US$ 0,015 no Sonnet).')) comentar(aKey, s, q, minha, true); };
+  if (c?.t) return mostraCom(A, q, c, refazer);
   const cfg = iaCfg();
   if (!cfg.key) return toast('Cadastre a chave da IA em Mais › IA para comentar questões.', 4000);
   if (navigator.onLine === false) return toast('Sem internet: o comentário precisa da IA.');
@@ -419,12 +442,13 @@ async function comentar(aKey, s, q, minha) {
   if (!d?.enun) return toast('Não achei o texto desta questão no PDF.');
   const G = v => (v === 'V' ? 'Verdadeiro' : v === 'F' ? 'Falso' : v || '?');
   const user = [`Matéria: ${MAT(A.sj)} · ${A.lab} · questão ${q}`, `Questão:\n${d.enun}`, `Gabarito oficial: ${G(d.gab)}${d.ref ? ' (' + d.ref + ')' : ''}`,
-    minha ? `Resposta do aluno: ${G(minha)}` : '', d.lei ? `Texto da lei (${d.leiNome}):\n${d.lei}` : ''].filter(Boolean).join('\n\n');
+    minha ? `Resposta do aluno: ${G(minha)}` : '', d.lei ? `Artigo citado no gabarito (${d.leiNome}):\n${d.lei}` : '',
+    d.trecho ? `Trecho da lei seca do tópico (${d.trechoNome}):\n${d.trecho}` : ''].filter(Boolean).join('\n\n');
   try {
     const t = (await gerar(cfg, PROMPT_COM, user)).trim(); if (!t) throw new Error('A IA não devolveu texto.');
     c = { t, em: Date.now(), por: `${cfg.prov}:${cfg.model}`, v: pv || '' }; await kvSet('com|' + comChave(A.file, q), c); S.comTem.add(comChave(A.file, q));
     if (e) { e.iaCom = t; e.iaComV = pv || ''; e.upd = Date.now(); await errPut(e); }
-    $('#toast').hidden = true; mostraCom(A, q, c);
+    $('#toast').hidden = true; mostraCom(A, q, c, refazer);
     $$('.qw').forEach(w => { const it = qItem(+w.dataset.qn, w.dataset.qk); if (it?.a === aKey) qRepaint(+w.dataset.qn, w.dataset.qk); });
   } catch (err) { toast(err.message || String(err), 6000); }
 }

@@ -126,7 +126,7 @@ export async function regiaoQuestao(doc, achado, { cache = new Map(), maxPag = 5
   const x0 = Math.max(0, Math.min(...[...usados].map(o => o.x)) - 8), x1 = Math.min(W, Math.max(...[...usados].map(o => o.x + o.w)) + 8);
   const seg = [];
   for (let k = 0; k <= pf; k++) {
-    const P = pags[k], y0 = k === 0 ? P.H - oi.y - oi.h * 1.15 : P.topo, y1 = k === pf ? (prox ? P.H - prox.y - prox.h * 1.1 : P.H - P.pe) : P.H - P.pe;
+    const P = pags[k], y0 = k === 0 ? P.H - oi.y - oi.h * 1.15 : P.topo, y1 = k === pf ? (prox ? P.H - prox.y - prox.h * 1.1 : Math.min(P.H - P.pe, P.H - of.y + of.h * 0.6 + 6)) : P.H - P.pe;
     if (y1 > y0 + 2) seg.push({ p: P.p, y0: Math.max(0, y0 - 4) / P.H, y1: Math.min(P.H, y1 + 2) / P.H });
   }
   return seg.length ? { seg, x0: x0 / W, x1: x1 / W } : null;
