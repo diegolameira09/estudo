@@ -81,6 +81,7 @@ dialog form{padding:16px;max-height:90vh;overflow:auto}
 .vctl input{width:84px;text-align:center;min-height:40px;padding:6px}
 .vtitle{flex:1;min-width:0;font-size:14px}
 .vtitle div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#vTrecho{color:var(--acc);font-weight:600}
 .vjump{display:flex;gap:6px;overflow-x:auto;padding:6px 8px;background:var(--card);border-bottom:1px solid var(--line)}
 .vjump:empty{display:none}
 .vjump .chip{flex:none;min-height:32px;padding:4px 10px;font-size:13px}

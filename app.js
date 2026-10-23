@@ -1241,7 +1241,15 @@ function goPage(p) {
   const d = vp.querySelector(`.pg[data-p="${p}"]`); if (d) vp.scrollTop += d.getBoundingClientRect().top - vp.getBoundingClientRect().top - 8;
   V.cur = p; paintPage();
 }
-function paintPage() { $('#vPage').textContent = `p. ${V.cur} de ${V.doc?.numPages || '?'}`; $('#vGo').value = V.cur; }
+function paintPage() { $('#vPage').textContent = `p. ${V.cur} de ${V.doc?.numPages || '?'}`; $('#vGo').value = V.cur; paintTrecho(); }
+// o que se estuda na página atual, pela sessão de onde o PDF foi aberto: o trecho da leitura que contém a página,
+// ou a lista de questões que começa nela ou antes (até o gabarito). Aberto fora de uma sessão, a linha some.
+function paintTrecho() {
+  const s = V.ctx?.sess && sess(V.ctx.sess), its = (s?.it || []).filter(it => it.a === V.aula), p = V.cur, el = $('#vTrecho');
+  const it = its.find(it => it.t === 'T' && p >= it.p[0] && p <= it.p[1]) || its.filter(it => it.t !== 'T' && it.s <= p && (!it.g || p < it.g)).sort((a, b) => b.s - a.s)[0];
+  const txt = !it ? '' : it.t === 'T' ? `${TIPO[aula(it.a)?.v] || 'Leitura'}${it.ti ? ': ' + it.ti : ''} (p. ${it.p[0]}${it.p[1] !== it.p[0] ? ' a ' + it.p[1] : ''})` : `${nomeLista(it)}${it.ti ? ': ' + it.ti : ''} (${qtxt(it.q)})`;
+  el.textContent = txt; el.hidden = !txt; el.title = txt;
+}
 vp.addEventListener('scroll', () => {
   if (!V.doc) return; cancelAnimationFrame(vp.raf);
   vp.raf = requestAnimationFrame(() => {
