@@ -92,7 +92,10 @@ dialog form{padding:16px;max-height:90vh;overflow:auto}
 .empty{color:var(--mut);text-align:center;padding:24px 0}
 details summary{cursor:pointer;min-height:36px;display:flex;align-items:center}
 .pg canvas.ink{position:absolute;inset:0;width:100%;height:100%;mix-blend-mode:multiply;pointer-events:none}
-.vtools{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 8px;background:var(--card);border-top:1px solid var(--line)}
+.vtools{flex:1;min-width:0;display:flex;flex-wrap:nowrap;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:thin;padding:2px 0}
+.vtools>*{flex:none}.vtools>.sp{flex:1 0 8px}
+.vctl .vtools:not([hidden])+.sp{display:none}
+.pg textarea.tw{position:absolute;z-index:3;margin:0;padding:0;border:1px dashed #64748B;border-radius:2px;background:rgba(255,255,255,.6);font-weight:600;font-family:system-ui,sans-serif;line-height:1.2;resize:none;overflow:hidden;white-space:pre;outline:none;min-height:0}
 .vtools[hidden]{display:none}
 .vtools .chip{min-height:34px;padding:4px 10px;font-size:13px}
 .sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);cursor:pointer}

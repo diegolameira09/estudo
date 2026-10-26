@@ -35,16 +35,16 @@
   <div class="vgrid" id="vGrid" hidden></div>
   <div class="vnote" id="vNote" hidden></div>
   <div class="vpages" id="vPages"></div>
-  <div class="vtools" id="vTools" hidden>
-    <button class="chip" data-tool="p">Caneta</button><button class="chip" data-tool="h">Marca-texto</button><button class="chip" data-tool="x">Texto</button><button class="chip" data-tool="e">Borracha</button>
-    <span id="vColors" class="row"></span><span class="sp"></span>
-    <button class="chip" id="vClear">Limpar PDF</button><button class="ib" id="vUndo" aria-label="Desfazer">↶</button><button class="chip acc" id="vDone">Pronto</button>
-  </div>
   <div class="vctl">
     <button id="vPrev" class="ib" aria-label="Página anterior">‹</button>
     <input id="vGo" type="number" inputmode="numeric" aria-label="Ir para página">
     <button id="vNext" class="ib" aria-label="Próxima página">›</button>
     <button id="vPen" class="ib" aria-label="Marcar no PDF">✎</button>
+    <div class="vtools" id="vTools" hidden>
+      <button class="chip" data-tool="p">Caneta</button><button class="chip" data-tool="h">Marca-texto</button><button class="chip" data-tool="x" title="Toque na página e digite">Máquina de escrever</button><button class="chip" data-tool="e">Borracha</button>
+      <span id="vColors" class="row"></span><span class="sp"></span>
+      <button class="chip" id="vClear">Limpar PDF</button><button class="ib" id="vUndo" aria-label="Desfazer">↶</button><button class="chip acc" id="vDone">Pronto</button>
+    </div>
     <span class="sp"></span>
     <button id="vZo" class="ib" aria-label="Diminuir zoom">−</button>
     <button id="vZi" class="ib" aria-label="Aumentar zoom">+</button>

@@ -1315,9 +1315,10 @@ let rsz; window.addEventListener('resize', () => { if ($('#viewer').hidden || !V
 
 
 /* ---------------- marcações (caneta, marca-texto, borracha, texto) ---------------- */
-const PEN = ['#DC2626', '#2563EB', '#111827'], ESP = [0.0008, 0.0016, 0.0024, 0.0032, 0.004], HL = ['#FFE600', '#22C55E', '#EF4444', '#3B82F6', '#A855F7'], HA = 0.3;
-const CNOME = { '#FFE600': 'Amarelo', '#22C55E': 'Verde', '#EF4444': 'Vermelho', '#3B82F6': 'Azul', '#A855F7': 'Roxo', '#DC2626': 'Vermelho', '#2563EB': 'Azul', '#111827': 'Preto' };
-Object.assign(V, { ann: new Map(), annFile: null, tool: null, color: { p: PEN[0], h: HL[0], x: PEN[0] }, esp: (() => { try { const w = +localStorage.getItem('caneta-tjsp'); return ESP.includes(w) ? w : 0.004; } catch { return 0.004; } })(), txt: new Map(), undo: [], ptrs: new Map(), stroke: null, pan: null });
+const PEN = ['#DC2626', '#2563EB', '#1E3A8A', '#111827'], TAM = [0.018, 0.025, 0.032], ESP = [0.0008, 0.0016, 0.0024, 0.0032, 0.004], HL = ['#FFE600', '#22C55E', '#EF4444', '#3B82F6', '#A855F7'], HA = 0.3;
+const CNOME = { '#FFE600': 'Amarelo', '#22C55E': 'Verde', '#EF4444': 'Vermelho', '#3B82F6': 'Azul', '#A855F7': 'Roxo', '#DC2626': 'Vermelho', '#2563EB': 'Azul', '#1E3A8A': 'Azul-marinho', '#111827': 'Preto' };
+Object.assign(V, { ann: new Map(), annFile: null, tool: null, color: { p: PEN[0], h: HL[0], x: PEN[0] }, esp: (() => { try { const w = +localStorage.getItem('caneta-tjsp'); return ESP.includes(w) ? w : 0.004; } catch { return 0.004; } })(),
+  tam: (() => { try { const z = +localStorage.getItem('texto-tjsp'); return TAM.includes(z) ? z : 0.025; } catch { return 0.025; } })(), tw: null, txt: new Map(), undo: [], ptrs: new Map(), stroke: null, pan: null });
 const akey = (f, p) => `a|${f}|${p}`;
 const aRange = f => IDBKeyRange.bound(`a|${f ?? ''}`, `a|${f ?? ''}￿`);
 async function loadAnn(file) {
@@ -1474,26 +1475,38 @@ function eraseAt(hit) {
   if (keep.length === ops.length) return false;
   snapshot(hit.p); V.ann.set(hit.p, keep); drawInk(hit.p); saveAnn(hit.p); return true;
 }
+// máquina de escrever (como no Foxit): toca na página e digita ali mesmo, com o teclado. Enter quebra a linha;
+// tocar fora, Esc ou trocar de ferramenta termina. Tocar num texto com a ferramenta reabre para editar; apagar tudo exclui.
 function textAt(hit, existing) {
-  const f = $('#dlgForm');
-  f.innerHTML = `<h3>${existing ? 'Editar texto' : 'Texto na página ' + hit.p}</h3><textarea id="tTxt" placeholder="Ex.: B, ou: caiu na prova">${esc(existing?.s || '')}</textarea>
-  <div class="row" style="margin-top:10px">${existing ? '<button type="button" class="btn bad" id="tDel">Excluir</button>' : ''}<span class="sp"></span><button type="button" class="btn" id="tC">Cancelar</button><button type="button" class="btn pri" id="tOk">Salvar</button></div>`;
-  const done = async (txt) => {
-    snapshot(hit.p); const ops = (V.ann.get(hit.p) || []).filter(o => o !== existing);
-    if (txt) ops.push({ t: 'x', x: existing?.x ?? rnd(hit.nx), y: existing?.y ?? rnd(hit.ny), s: txt, c: existing?.c ?? V.color.x, z: 0.032 });
-    V.ann.set(hit.p, ops); drawInk(hit.p); await saveAnn(hit.p); $('#dlg').close();
-  };
-  $('#tC', f).onclick = () => $('#dlg').close();
-  $('#tOk', f).onclick = () => done($('#tTxt', f).value.trim());
-  if (existing) $('#tDel', f).onclick = () => done('');
-  $('#dlg').showModal(); setTimeout(() => $('#tTxt', f).focus(), 50);
+  fechaTw();
+  const p = hit.p, op = existing ? { ...existing } : { t: 'x', x: rnd(hit.nx), y: rnd(hit.ny), s: '', c: V.color.x, z: V.tam };
+  if (existing) { snapshot(p); V.ann.set(p, (V.ann.get(p) || []).filter(o => o !== existing)); drawInk(p); }
+  const ta = document.createElement('textarea'), fs = op.z * V.w;
+  ta.className = 'tw'; ta.value = op.s; ta.spellcheck = false; ta.setAttribute('aria-label', 'Texto na página ' + p);
+  Object.assign(ta.style, { left: op.x * 100 + '%', top: op.y * 100 + '%', fontSize: fs + 'px', color: op.c });
+  const ajusta = () => { const ls = ta.value.split('\n'); ta.rows = ls.length; ta.style.height = ls.length * fs * 1.2 + 2 + 'px';
+    ta.style.width = Math.min((1 - op.x) * V.w, Math.max(fs * 3, Math.max(...ls.map(l => l.length)) * fs * 0.62 + fs)) + 'px'; };
+  ta.oninput = ajusta; ajusta();
+  ta.onkeydown = e => { if (e.key === 'Escape') { e.preventDefault(); fechaTw(); } };
+  ta.onblur = () => fechaTw();
+  hit.d.append(ta); ta.focus();
+  V.tw = { ta, fim: async () => {
+    V.tw = null; const s = ta.value.replace(/\s+$/, ''); ta.remove();
+    if (!s && !existing) return;
+    if (!existing) snapshot(p);
+    if (s) V.ann.set(p, [...(V.ann.get(p) || []), { ...op, s }]);
+    drawInk(p); await saveAnn(p);
+  } };
 }
+function fechaTw() { const t = V.tw; if (t) t.fim(); }
 function textHit(hit) {
-  const ratio = pgH(hit.p) / V.w;
+  const ratio = pgH(hit.p) / V.w || 1.414;
   return (V.ann.get(hit.p) || []).find(op => op.t === 'x' && hit.nx >= op.x - 0.01 && hit.nx <= op.x + String(op.s).length * op.z * 0.6 + 0.01 && hit.ny >= op.y - 0.01 && hit.ny <= op.y + String(op.s).split('\n').length * op.z * 1.2 / ratio + 0.01);
 }
 vp.addEventListener('pointerdown', e => {
-  if (!V.tool) return;
+  if (!V.tool || e.target.closest?.('.tw')) return;
+  // máquina de escrever aberta: o toque fora só termina o texto
+  if (V.tw) { e.preventDefault(); fechaTw(); return; }
   e.preventDefault(); vp.setPointerCapture?.(e.pointerId);
   V.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, t: Date.now(), x0: e.clientX, y0: e.clientY });
   if (V.ptrs.size >= 2) {
@@ -1514,6 +1527,7 @@ vp.addEventListener('pointerdown', e => {
   }
 }, { passive: false });
 vp.addEventListener('pointermove', e => {
+  if (e.target.closest?.('.tw')) return;
   if (!V.tool || !V.ptrs.has(e.pointerId)) return;
   e.preventDefault();
   const pt = V.ptrs.get(e.pointerId); pt.x = e.clientX; pt.y = e.clientY;
@@ -1567,19 +1581,22 @@ async function limparMarcacoes() {
 $('#vNote').onclick = e => { if (e.target.id === 'vClearOld') limparMarcacoes(); };
 
 function paintTools() {
+  if (V.tool !== 'x') fechaTw();
   const on = !!V.tool;
   $('#vTools').hidden = !on; $('#vPen').classList.toggle('on', on);
   vp.style.touchAction = on ? 'none' : '';
   $$('#vTools [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === V.tool));
   const pal = V.tool === 'h' ? HL : V.tool === 'e' ? [] : PEN;
   $('#vColors').innerHTML = pal.map(c => `<button class="sw ${V.color[V.tool] === c ? 'on' : ''}" data-c="${c}" style="background:${c}" aria-label="${CNOME[c] || 'Cor'}" title="${CNOME[c] || ''}"></button>`).join('')
-    + (V.tool === 'p' ? '<span class="esp">' + ESP.map((w, i) => `<button class="espb ${V.esp === w ? 'on' : ''}" data-w="${w}" aria-label="Espessura 0,${i + 1}" title="0,${i + 1}"><i style="width:${4 + i * 3}px;height:${4 + i * 3}px;background:${V.color.p}"></i></button>`).join('') + '</span>' : '');
+    + (V.tool === 'p' ? '<span class="esp">' + ESP.map((w, i) => `<button class="espb ${V.esp === w ? 'on' : ''}" data-w="${w}" aria-label="Espessura 0,${i + 1}" title="0,${i + 1}"><i style="width:${4 + i * 3}px;height:${4 + i * 3}px;background:${V.color.p}"></i></button>`).join('') + '</span>' : '')
+    + (V.tool === 'x' ? '<span class="esp">' + TAM.map((z, i) => `<button class="espb ${V.tam === z ? 'on' : ''}" data-tz="${z}" aria-label="Letra ${['pequena', 'média', 'grande'][i]}" title="Letra ${['pequena', 'média', 'grande'][i]}"><b style="font-size:${11 + i * 4}px;color:${V.color.x}">A</b></button>`).join('') + '</span>' : '');
   if (V.tool === 'h' && V.doc) for (let k = Math.max(1, V.cur - 1); k <= Math.min(V.doc.numPages, V.cur + 2); k++) textLines(k);
 }
 $('#vPen').onclick = () => { V.tool = V.tool ? null : 'p'; paintTools(); };
 $('#vTools').onclick = async e => {
   const t = e.target.closest('[data-tool]'); if (t) { V.tool = t.dataset.tool; paintTools(); return; }
   const c = e.target.closest('[data-c]'); if (c) { V.color[V.tool] = c.dataset.c; paintTools(); return; }
+  const tz = e.target.closest('[data-tz]'); if (tz) { V.tam = +tz.dataset.tz; try { localStorage.setItem('texto-tjsp', tz.dataset.tz); } catch {} paintTools(); return; }
   const w = e.target.closest('[data-w]'); if (w) { V.esp = +w.dataset.w; try { localStorage.setItem('caneta-tjsp', w.dataset.w); } catch {} paintTools(); return; }
   const id = e.target.closest('button')?.id;
   if (id === 'vUndo') { const u = V.undo.pop(); if (!u) return toast('Nada para desfazer.'); V.ann.set(u.p, u.ops); drawInk(u.p); await saveAnn(u.p); if (u.p !== V.cur) goPage(u.p); }
