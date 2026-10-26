@@ -103,16 +103,17 @@ function qtxt(q) {
   if (st === 2) return `${a % 2 ? 'ímpares' : 'pares'} ${a} a ${b}`;
   return `questões ${a} a ${b}`;
 }
-// tipo do PDF (aula.v): M mapeando, L lei seca, F fixação V/F, Q questões
-const TIPO = { M: 'Mapeando', L: 'Lei seca', F: 'Fixação V/F', Q: 'Questões' };
-const nomeLista = it => (aula(it.a)?.v === 'F' ? 'Fixação' : 'Questões');
+// tipo do PDF (aula.v): M mapeando, L lei seca, B apostila do Baronovsky (lei comentada, com questões no meio), F fixação V/F, Q questões
+const TIPO = { M: 'Mapeando', L: 'Lei seca', B: 'Apostila', F: 'Fixação V/F', Q: 'Questões' };
+const nomeLista = it => (aula(it.a)?.v === 'F' ? 'Fixação' : aula(it.a)?.v === 'B' ? 'Questões da apostila' : 'Questões');
 function itemText(it) {
   const ti = it.ti ? ` «${esc(it.ti)}»` : '';
-  if (it.t === 'T') return `${aula(it.a)?.v === 'M' ? 'Ler' : 'Lei seca'}${ti} p. ${it.p[0]}${it.p[0] === it.p[1] ? '' : ' a ' + it.p[1]}`;
+  const v = aula(it.a)?.v;
+  if (it.t === 'T') return `${v === 'M' ? 'Ler' : v === 'B' ? 'Apostila' : 'Lei seca'}${ti} p. ${it.p[0]}${it.p[0] === it.p[1] ? '' : ' a ' + it.p[1]}${v === 'B' && S.C.sessoes.some(s => s.it?.some(x => x.t === 'L' && x.a === it.a)) ? ' <span class="mut">(pule as questões: elas vêm logo abaixo)</span>' : ''}`;
   return `${nomeLista(it)}${ti} p. ${it.s}: <b>${qtxt(it.q)}</b>`;
 }
 function itemJumps(it) {
-  if (it.t === 'T') return [[`${aula(it.a)?.v === 'M' ? 'Ler' : 'Lei'} p. ${it.p[0]}`, it.p[0]]];
+  if (it.t === 'T') return [[`${{ M: 'Ler', B: 'Apostila' }[aula(it.a)?.v] || 'Lei'} p. ${it.p[0]}`, it.p[0]]];
   const j = [[`${nomeLista(it)} p. ${it.s}`, it.s]];
   if (it.g) j.push([`Gabarito p. ${it.g}`, it.g]);
   if (it.c) j.push([`Comentários p. ${it.c}`, it.c]);
@@ -152,7 +153,7 @@ function qGrid(n, key, it) {
   const ns = qNums(it.q); if (!ns.length) return '';
   const m = S.prog[n]?.qm?.[key] || {}; const ok = ns.filter(q => m[q] === 'o').length, er = ns.filter(q => m[q] === 'x' || m[q] === 'c').length;
   const A = aula(it.a), G = gabDe(it);
-  if (!G && (A?.v === 'F' || A?.v === 'Q')) lerGab(A.file);
+  if (!G && ['F', 'Q', 'B'].includes(A?.v)) lerGab(A.file);
   if (G) {
     const qa = S.prog[n]?.qa?.[key] || {}, sel = S.qSel?.n === n && S.qSel?.key === key ? S.qSel.q : null, ult = S.qUlt?.n === n && S.qUlt?.key === key ? S.qUlt.q : null;
     const res = q => (qa[q] && G[q] ? `q.${q}: você ${qa[q]}, gabarito ${G[q].r} ${m[q] === 'o' ? '<b class="good">✓</b>' : '<b class="bad">✗</b>'}${m[q] === 'c' ? ' (chute)' : ''} ${m[q] !== 'o' ? botaoArt(artigoDe(it.a, G[q].ref)) : ''} ${botaoCom(it.a, q, `data-q="${q}"`)}` : '');
@@ -362,7 +363,7 @@ function artigoDe(aKey, ref) {
   const acha = a => L.arts.find(x => x[0] === a && x[2] === lei) || L.arts.find(x => x[0] === a);
   // artigo com letra que não aparece como título na lei seca (ex.: 29-A só citado em outro artigo): abre o artigo-base, que fica ao lado
   const e = acha(art) || (art.includes('-') && acha(art.split('-')[0]));
-  return e ? { a: A.lei, p: e[1], art } : null;
+  return e ? { a: e[3] || A.lei, p: e[1], art } : null;
 }
 const artigoErro = e => artigoDe(e.aula, S.gab[aula(e.aula)?.file]?.g?.[+digits(e.questao)]?.ref || e.coment || e.regra);
 const botaoArt = x => (x ? `<button type="button" class="chip" data-open="${esc(x.a)}" data-page="${x.p}">Ler art. ${esc(x.art)}</button>` : '');
@@ -396,25 +397,31 @@ async function dadosComentario(aKey, s, q) {
   const lei = x ? await textoArtigo(x) : '', tr = await textoTrecho(aKey, s, x, lei);
   return { enun, gab: G?.r, ref: G?.ref ? limpar(G.ref, nomes) : '', lei, leiNome: x ? `art. ${x.art}, ${aula(x.a).lab}` : '', ...tr };
 }
-// trecho da lei seca do tópico da questão (o que foi lido na sessão): as alternativas erradas costumam vir dos artigos vizinhos
-// ao citado no gabarito (às vezes no trecho anterior). Longo demais: a janela em volta do artigo citado.
+// trecho da lei do tópico da questão: as alternativas erradas costumam vir dos artigos vizinhos ao citado no gabarito.
+// Questão da apostila: as páginas antes dela (o artigo comentado). Do Alvo no TJ: em volta do artigo citado, no PDF em que ele está
+// (apostila ou lei seca), junto com a leitura do tópico se for o mesmo PDF. Longo demais: a janela em volta do artigo citado.
 const TRECHO_MAX = 14000;
 async function textoTrecho(aKey, s, x, artTxt) {
-  const A = aula(aKey), L = A?.lei && aula(A.lei); if (!L) return {};
+  const A = aula(aKey); if (!A) return {};
   const it = S.C.sessoes.flatMap(z => [...(z.it || []), ...(z.ev || [])]).find(i => i.a === aKey && i.s === s && i.tp);
-  const T = it && S.C.sessoes.flatMap(z => z.it || []).find(i => i.t === 'T' && i.a === A.lei && i.tp === it.tp);
-  // páginas: em volta do artigo citado (uma antes e uma depois) e, se o tópico estiver perto, o tópico inteiro (até 8 páginas)
-  let [p0, p1] = x ? [Math.max(1, x.p - 1), x.p + 1] : T ? [T.p[0], T.p[1]] : [];
-  if (x && T && T.p[0] <= p1 + 1 && T.p[1] >= p0 - 1) [p0, p1] = [Math.min(p0, T.p[0]), Math.max(p1, T.p[1])];
-  if (p1 - p0 > 7) [p0, p1] = x ? [Math.max(p0, x.p - 3), Math.min(p1, x.p + 4)] : [p0, p0 + 7];
-  if (!p0) return {};
-  const X = await docX(L.file); if (!X) return {};
+  const Ts = it ? S.C.sessoes.flatMap(z => z.it || []).filter(i => i.t === 'T' && i.tp === it.tp) : [];
+  let a, p0, p1;
+  if (A.v === 'B') [a, p0, p1] = [aKey, Math.max(1, s - 2), s];
+  else if (x) { const T = Ts.find(i => i.a === x.a); [a, p0, p1] = [x.a, Math.max(1, x.p - 1), x.p + 1];
+    // do 3º artigo antes ao 3º depois (na apostila cada artigo vem com comentários e ocupa mais páginas que na lei seca)
+    const idx = (aula(A.lei)?.arts || []).filter(e => (e[3] || A.lei) === x.a).sort((m, n) => m[1] - n[1]), k = idx.findIndex(e => e[0] === x.art);
+    if (k >= 0) { p0 = Math.min(p0, idx[Math.max(0, k - 3)][1]); p1 = Math.max(p1, idx[k + 4] ? idx[k + 4][1] - 1 : idx[idx.length - 1][1] + 1); }
+    if (T && T.p[0] <= p1 + 1 && T.p[1] >= p0 - 1) [p0, p1] = [Math.min(p0, T.p[0]), Math.max(p1, T.p[1])]; }
+  else if (Ts.length) [a, p0, p1] = [Ts[0].a, Ts[0].p[0], Ts[0].p[1]];
+  else return {};
+  if (p1 - p0 > 7) [p0, p1] = x && a === x.a ? [Math.max(p0, x.p - 3), Math.min(p1, x.p + 4)] : [p0, p0 + 7];
+  const L = aula(a), X = await docX(L.file); if (!X) return {};
   // limpa página por página (o limpar corta em 8.000 caracteres); os nomes da marca d'água valem para todas
   const pags = [], nomes = new Set();
   for (let p = p0; p <= Math.min(X.doc.numPages, p1); p++) { const r = await textoPagina(X.doc, p, X.cache); r.nomes.forEach(v => nomes.add(v)); pags.push(r.texto); }
   let txt = pags.map(t => limpar(t, [...nomes])).join('\n');
   if (txt.length > TRECHO_MAX) { const i = artTxt ? Math.max(0, txt.indexOf(artTxt.slice(0, 60))) : 0; const ini = Math.max(0, Math.min(i - TRECHO_MAX / 3, txt.length - TRECHO_MAX)); txt = txt.slice(ini, ini + TRECHO_MAX); }
-  return { trecho: txt, trechoNome: `${L.lab}, p. ${p0}${p1 > p0 ? ' a ' + p1 : ''}` };
+  return { trecho: txt, trechoNome: `${MAT(L.sj)}, ${L.lab}, p. ${p0}${p1 > p0 ? ' a ' + p1 : ''}` };
 }
 function mostraCom(A, q, c, refazer) {
   const f = $('#dlgForm');
@@ -488,9 +495,12 @@ const SIM_COMP = { LP: 8, PEN: 2, PPE: 2, PCI: 2, CON: 2, ADM: 3, LEG: 3, PCD: 1
 const simulados = () => Object.keys(S.prog).map(Number).filter(n => n > SIM0 && S.prog[n]?.sim).sort((a, b) => a - b);
 async function novoSimulado() {
   const usados = new Set(simulados().flatMap(n => S.prog[n].sim.flatMap(it => qNums(it.q).map(q => it.a + '|' + q))));
-  const itens = [];
-  for (const [sj, k] of Object.entries(SIM_COMP)) {
-    const esc_ = (S.C.sim?.[sj] || []).filter(([a, q]) => !usados.has(a + '|' + q)).slice(0, k);
+  const itens = [], livres = sj => (S.C.sim?.[sj] || []).filter(([a, q]) => !usados.has(a + '|' + q)), pega = {};
+  for (const [sj, k] of Object.entries(SIM_COMP)) pega[sj] = livres(sj).slice(0, k);
+  // matéria de Direito sem questão sobrando (ex.: PCD, toda no cronograma): o bloco de Direito completa com as outras leis que ainda têm
+  const DIR = ['LEG', 'ADM', 'PCI', 'CON', 'PPE', 'PEN', 'PCD']; let falta = DIR.reduce((t, sj) => t + (SIM_COMP[sj] || 0) - (pega[sj]?.length || 0), 0);
+  for (let i = 0; falta > 0 && i < 50; i++) for (const sj of DIR) { if (falta <= 0) break; const x = livres(sj)[pega[sj].length]; if (x) { pega[sj].push(x); falta--; } }
+  for (const [sj, esc_] of Object.entries(pega)) {
     for (const [a, q, p, g] of esc_) { const ult = itens[itens.length - 1]; if (ult && ult.a === a && ult.q[1] === q - 1) ult.q[1] = q; else itens.push({ t: 'L', a, s: p, q: [q, q, 1], ...(g ? { g } : {}) }); }
   }
   if (!itens.length) return toast('Acabaram as questões reservadas para simulado.');
@@ -621,9 +631,11 @@ function contentCard(s, p) {
   return h + (s.it.some(it => it.t !== 'T') ? `<div class="small mut" style="margin-top:8px">Questões: toque no número e depois na letra que você marcou; o app corrige pelo gabarito do PDF (sem o PDF importado: um toque ✓, dois ✗, três ? chutei). Errada e chutada viram erro e voltam nas revisões.</div>` : '') + `</div>`;
 }
 // reforço do item: aparece quando você errou 35% ou mais do tópico nos ciclos anteriores
+// videoaula do Baronovsky do tópico (C.vid: título do módulo): sugerida quando o tópico vai mal; o estudo continua pela leitura
+const videoHTML = tp => (S.C.vid?.[tp] ? `<div class="small mut">▶ Vale assistir à videoaula do Baronovsky do módulo «${esc(S.C.vid[tp])}».</div>` : '');
 function reforcoHTML(n, i, it, st) {
   const t = reforcoDe(it, st); if (!t) return '';
-  return `<div class="reforco"><div class="small"><b>Reforço:</b> você errou ${pct(t.r - t.ok, t.r)}% deste tópico nos ciclos anteriores (${t.r} questões). Mais ${qNums(it.x.q).length}:</div>
+  return `<div class="reforco"><div class="small"><b>Reforço:</b> você errou ${pct(t.r - t.ok, t.r)}% deste tópico nos ciclos anteriores (${t.r} questões). Mais ${qNums(it.x.q).length}:</div>${videoHTML(it.tp)}
     <div class="acts"><button class="chip" data-open="${it.x.a}" data-page="${it.x.s}">${esc(nomeLista(it.x))} p. ${it.x.s}</button></div>${qGrid(n, i + 'x', qItem(n, i + 'x'))}</div>`;
 }
 function errLine(e) {
@@ -828,7 +840,7 @@ function renderRel() {
   T.sort(ff.ord === 'mais' ? (a, b) => totQ(b[1]) - totQ(a[1]) : ff.ord === 'crono' ? (a, b) => a[1].ord - b[1].ord : (a, b) => taxa(a) - taxa(b) || totQ(b[1]) - totQ(a[1]));
   h += `<div class="card"><h3>Acerto por tópico</h3><select id="rMat"><option value="">Todas as matérias</option>${ORDEM.filter(sj => Object.keys(R.tps).some(tp => tp.startsWith(sj + '|'))).map(sj => `<option value="${sj}" ${sj === ff.mat ? 'selected' : ''}>${esc(MAT(sj))}</option>`).join('')}</select>
     <div class="row wrap" style="margin-top:8px">${[['pior', 'Pior acerto'], ['mais', 'Mais questões'], ['crono', 'Ordem do cronograma']].map(([k, l]) => `<button class="chip ${ff.ord === k ? 'on' : ''}" data-ro="${k}">${l}</button>`).join('')}</div>
-    ${T.length ? `<div class="rtab"><table><thead><tr><th>Tópico</th><th>Certas</th><th>Erradas</th><th>Chute</th><th>Acerto</th></tr></thead><tbody>${T.map(([tp, t]) => `<tr><td>${esc(S.C.tps?.[tp] || tp)}</td><td>${t.o}</td><td>${t.x}</td><td>${t.c}</td><td>${fx(t, true)}</td></tr>`).join('')}</tbody></table></div>
+    ${T.length ? `<div class="rtab"><table><thead><tr><th>Tópico</th><th>Certas</th><th>Erradas</th><th>Chute</th><th>Acerto</th></tr></thead><tbody>${T.map(([tp, t]) => `<tr><td>${esc(S.C.tps?.[tp] || tp)}${totQ(t) >= POUCO && pct(t.o, totQ(t)) < CORTE && S.C.vid?.[tp] ? '<div class="small mut">▶ assistir à videoaula deste módulo</div>' : ''}</td><td>${t.o}</td><td>${t.x}</td><td>${t.c}</td><td>${fx(t, true)}</td></tr>`).join('')}</tbody></table></div>
       <div class="small mut" style="margin-top:6px">Com menos de ${POUCO} questões a taxa ainda engana: aparece "poucos dados".</div>` : '<p class="small mut">Nenhuma questão respondida nos tópicos desta matéria.</p>'}</div>`;
   const v = $('#view'); v.innerHTML = h;
   v.onclick = ev => { const g = ev.target.closest('[data-rg]'), o = ev.target.closest('[data-ro]'); if (g) { ff.g = g.dataset.rg; render(); } if (o) { ff.ord = o.dataset.ro; render(); } };
@@ -1098,7 +1110,7 @@ async function importarPDFs(files) {
     await pdfPut(A.file, file); S.pdfs.add(A.file); ok++;
     if (h) { S.pv[A.file] = h; await kvSet('pv|' + A.file, h); if (A.ver && h !== A.ver) dif++; }
     // caderno de questões ou fixação: lê o gabarito agora (PDF reimportado = gabarito novo)
-    if (['F', 'Q'].includes(A.v)) { delete S.gab[A.file]; gabSem.delete(A.file); lerGab(A.file); }
+    if (['F', 'Q', 'B'].includes(A.v)) { delete S.gab[A.file]; gabSem.delete(A.file); lerGab(A.file); }
   }
   $('#dlg').close();
   try { await navigator.storage?.persist?.(); } catch {}

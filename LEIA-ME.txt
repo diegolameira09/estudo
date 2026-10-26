@@ -2,7 +2,7 @@ ESTUDO TJ-SP: app do cronograma do Escrevente TJ-SP (VUNESP), offline no PC, cel
 
 O que é
 - Mostra as sessões do dia (3 por dia, de segunda a sexta), abre o PDF na página certa, cronometra 20/5/20/3, corrige as questões pelo gabarito do próprio PDF e guarda o caderno de erros.
-- Prova em 14/03/2027. O cronograma tem 283 sessões e termina em 04/03/2027, deixando a última semana livre.
+- Prova em 14/03/2027. O cronograma (refeito em 26/10/2026) tem 272 sessões e termina em 05/03/2027, deixando a última semana livre.
 - Depois de instalado, funciona sem internet. Progresso, erros, PDFs e gabaritos ficam só nos seus aparelhos.
 
 1. Endereço
@@ -17,12 +17,12 @@ O que é
 
 3. Colocar os PDFs
 1) Copie a pasta PDF para o aparelho.
-2) No app: Mais > Importar PDFs > selecione todos os PDFs. São 42 arquivos, cerca de 120 MB (não entram: os 11 "Mapeando", o edital e os 2 cadernos de Matemática).
-3) Ao importar, o app lê o gabarito de cada caderno de questões e de fixação (menos de 1 segundo por arquivo).
+2) No app: Mais > Importar PDFs > selecione todos os PDFs. São 139 arquivos, cerca de 170 MB: as 97 apostilas do Baronovsky, as 12 leis secas e os 30 cadernos de questões e de fixação do Alvo no TJ (não entram: os 7 "Mapeando", o edital e os 2 cadernos de Matemática).
+3) Ao importar, o app lê o gabarito de cada caderno e de cada apostila (menos de 1 segundo por arquivo).
 
 4. Uso diário
 - Aba Sessão: siga a sessão do dia. Cada sessão é de uma matéria e mostra o ciclo (ex.: "ciclo 2 · arts. 293 a 305"). Nas matérias de lei: ler o trecho da lei seca e fazer de 5 a 10 questões dele (fixação V/F e caderno). Em Português, Informática e Raciocínio Lógico: de 5 a 10 questões por tema.
-- Os botões abrem o PDF na página indicada. No topo do leitor aparece o trecho que você está estudando na página atual (ex.: "Lei seca: ciclo 1 · arts. 16 a 52 (p. 8 a 11)"); muda sozinho ao rolar. Marque cada item feito.
+- Os botões abrem o PDF na página indicada. Na apostila, pule as questões: elas vêm logo abaixo, na grade. No topo do leitor aparece o trecho que você está estudando na página atual (ex.: "Lei seca: ciclo 1 · arts. 16 a 52 (p. 8 a 11)"); muda sozinho ao rolar. Marque cada item feito.
 - Questões: toque no número da questão: ela aparece ali mesmo, recortada do PDF (com figura e formatação; toque na imagem para ampliar, e "Ver no PDF p. N" abre o PDF para conferir). Depois toque na letra que você marcou (A a E, ou V e F na fixação). O app compara com o gabarito do PDF, marca acerto ou erro, mostra a resposta certa e já abre a próxima. Se chutou, toque em "chutei" antes da letra. "limpar" desfaz.
 - Errada ou chutada vira erro na hora, com sua resposta e o gabarito, e volta sozinha nas revisões.
 - Sem o PDF importado, a grade funciona no modo manual: um toque ✓, dois ✗, três ? chutei.
@@ -32,17 +32,20 @@ O que é
 - Fechamento: escreva 3 linhas sem consultar e toque em Concluir sessão.
 - Revisões (sessões 5, 10, 15...): refaça os erros que voltam e marque Acertei ou Errei. Algumas revisões trazem questões inéditas, que não couberam nas sessões normais.
 - Reforço: do 2º ciclo em diante, se você errou 35% ou mais de um tópico nos ciclos anteriores, aparece embaixo das questões dele um "Reforço" com mais questões (que não estão em nenhuma outra sessão).
-- Ler o artigo: quando você erra uma questão de lei, aparece "Ler art. N", que abre a lei seca na página do artigo citado no gabarito. O mesmo botão aparece na revisão e no erro (aba Erros).
+- Ler o artigo: quando você erra uma questão de lei, aparece "Ler art. N", que abre a apostila do Baronovsky na página do artigo citado no gabarito (o que não estiver na apostila abre na lei seca). O mesmo botão aparece na revisão e no erro (aba Erros).
 - Comentar: depois de responder uma questão (e nos erros da revisão), o botão "Comentar" pede à IA configurada em Mais > IA um comentário curto: por que o gabarito está certo, o erro de cada alternativa e onde você provavelmente se confundiu. Nas questões de lei, a IA recebe o artigo citado no gabarito e o trecho da lei seca em volta dele (os artigos vizinhos, de onde costumam vir as alternativas erradas), tirados da sua lei seca. Cada toque gera um comentário (cerca de US$ 0,015 no Sonnet 5.5); depois ele fica guardado e "Ver comentário" abre sem custo e sem internet. Se o comentário ficou fraco, "Gerar de novo" pede outro. Precisa de internet e da chave da API neste aparelho.
 - Relatório (aba própria): quanto você estudou (sessões feitas, questões respondidas, sessões e questões por semana nas últimas 8 semanas, sessões e ciclo atual de cada matéria) e como está indo (acerto por matéria com a marca dos 50% dos blocos eliminatórios, e tabela por tópico, com filtro por matéria e ordem). Chute conta à parte, nunca como acerto. Com menos de 10 questões aparece "poucos dados", porque a taxa ainda engana. Tempo de estudo não é contado.
 - Cartões (aba Erros): revisão rápida das "Regras corretas" geradas pela IA, sem internet. Lembre a regra, vire o cartão e marque Lembrei ou Não lembrei; os que você não lembrou voltam primeiro.
 - Mini-simulado (aba Cronograma): 30 questões que não entraram no cronograma, na proporção da prova (Português 8, Direito 15, Informática 4, Raciocínio 3), com resultado por bloco. Bom no fim de cada ciclo. Não conta como sessão do cronograma; os erros dele voltam na próxima revisão.
 
-5. Como o cronograma foi montado (por ciclos)
-- Cada matéria gira em ciclos. Um ciclo passa por todos os tópicos dela: nas matérias de lei, lê a lei seca inteira, trecho por trecho, com 5 a 10 questões novas por trecho; em Português, Informática e Raciocínio Lógico, 5 a 10 questões novas por tema. O ciclo seguinte volta aos mesmos tópicos com questões que você ainda não fez.
-- Quantas questões por tópico (5 a 10): pelo peso. Nas leis, pelos artigos que mais caíram no TJ-SP (marcações de ano da lei seca); nos outros, pela quantidade de questões da VUNESP sobre o tema.
-- Cada lei é lida de 2 a 6 vezes até a prova: no mínimo 2 (inclusive Legislação Interna, que é enorme), no máximo cerca de 5, para lei curta (Código Penal, Constituição) não tomar o tempo das grandes.
-- O resto do tempo vai pelo peso na prova: Português 16 questões, Informática 9, Raciocínio Lógico 7, Direito Administrativo 6, Processo Penal, Processo Civil, Constitucional e Legislação Interna 5 cada, Penal 4, Estatuto da PCD 2. Quando um ciclo não cabe inteiro no fim, entram primeiro os tópicos de maior peso.
+5. Como o cronograma foi montado (por ciclos, modelo híbrido nas leis)
+- Cada matéria gira em ciclos. Um ciclo passa por todos os tópicos dela, com 5 a 10 questões novas por tópico; o ciclo seguinte volta aos mesmos tópicos com questões que você ainda não fez.
+- Nas matérias de lei, o tópico é uma aula do Baronovsky (ex.: "Falsidade Documental (parte I)").
+  1º ciclo: a apostila inteira (lei com marcações e comentários). As questões que aparecem no meio da apostila você pula na leitura: elas vêm logo abaixo, na grade, com correção, caderno de erros e revisões. Depois, as questões do Alvo no TJ daquele tópico.
+  Do 2º ciclo em diante: releitura pela lei seca do Alvo no TJ, nas páginas dos mesmos artigos, e mais questões do Alvo no TJ.
+- Quantas questões por tópico (5 a 10): pelo peso, que é quantas questões do Alvo no TJ caem nos artigos da aula; nos outros, quantas questões da VUNESP o caderno tem do tema.
+- O tempo vai pelo peso na prova: Português 16 questões, Informática 9, Raciocínio Lógico 7, Direito Administrativo 6, Processo Penal, Processo Civil, Constitucional e Legislação Interna 5 cada, Penal 4, Estatuto da PCD 2. A apostila inteira entra para todas as leis; a releitura pela lei seca vai primeiro para os tópicos de mais peso (Penal, Processo Penal, Constitucional e Administrativo quase inteiros; Legislação Interna, que é enorme, em parte).
+- Videoaula: o estudo é por leitura. Quando um tópico de lei vai mal (reforço aparecendo, ou abaixo de 50% no Relatório), o app sugere a videoaula do Baronovsky daquele módulo.
 - Fora do app: Matemática (só 4 questões), Atualidades (vídeos) e Redação (último mês, à parte).
 
 6. IA e caderno de erros (opcional, com internet)
@@ -61,4 +64,4 @@ O que é
 
 8. Atualizar o app
 - Mais > Versão do app mostra a versão instalada. "Procurar atualização" verifica na hora; havendo versão nova, o app recarrega sozinho.
-- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v20; a próxima é estudo-tjsp-v21).
+- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v21; a próxima é estudo-tjsp-v22).

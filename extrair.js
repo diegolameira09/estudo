@@ -54,6 +54,15 @@ const BANCA = /(?:^|\n)[ \t]*\([^)\n]{2,120}\d{4}[^)\n]{0,40}\)/g;
 const FIM = /\n[ \t]*(?:GABARITO[ \t]*(?:\n|$)|LISTA DE QUEST|QUESTÕES COMENTADAS)/;
 const BLOCO = /(?:^|\n)[ \t]*(?:GABARITO[ \t]*(?:\n|$)|LISTA DE QUEST|QUESTÕES COMENTADAS)/;
 
+// fim das alternativas: a linha "e)" e as que a completam até o ponto final, ou o "( ) Verdadeiro ( ) Falso". Nas apostilas do
+// Baronovsky a questão vem no meio da lei, sem a próxima logo depois: sem isso o texto levaria a lei e os comentários seguintes
+function fimAlt(t) {
+  const out = [], vf = /\(\s*\)\s*Verdadeiro\s*\(\s*\)\s*Falso[^\n]*/.exec(t), e = /\n[ \t]*[eE]\)[^\n]*/.exec(t);
+  if (vf) out.push(vf.index + vf[0].length);
+  if (e) { let fim = e.index + e[0].length; for (let k = 0; k < 6 && !/[.?!][\s"”)]*$/.test(t.slice(0, fim)); k++) { const nx = t.indexOf('\n', fim + 1); fim = nx < 0 ? t.length : nx; if (nx < 0) break; } out.push(fim); }
+  return out.length ? Math.min(...out) : -1;
+}
+
 // procura a questão q a partir da página p0 (até maxPag páginas adiante) e devolve { pag, texto, nomes }
 // a busca não atravessa para outro bloco (outra lista, gabarito), onde a numeração recomeça
 export async function acharQuestao(doc, p0, q, { maxPag = 80, cache = new Map() } = {}) {
@@ -67,6 +76,7 @@ export async function acharQuestao(doc, p0, q, { maxPag = 80, cache = new Map() 
     }
     else txt += '\n' + r.texto;
     const corpo = txt.slice(1); const fins = [ini(q + 1).exec(corpo), FIM.exec(corpo)].filter(Boolean);
+    const fa = fimAlt(corpo); if (fa >= 0) fins.push({ index: fa });
     if (fins.length) return { pag: pIni, texto: txt.slice(0, 1 + Math.min(...fins.map(f => f.index))).trim(), nomes };
     if (p - pIni >= 4) break;
   }
