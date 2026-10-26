@@ -27,7 +27,7 @@ O que é
 - Errada ou chutada vira erro na hora, com sua resposta e o gabarito, e volta sozinha nas revisões.
 - Sem o PDF importado, a grade funciona no modo manual: um toque ✓, dois ✗, três ? chutei.
 - Dentro do leitor de PDF, o botão "Questões" mostra a mesma grade, sem fechar o PDF.
-- Marcações no PDF (lápis ✎ na barra de baixo; as ferramentas aparecem ali mesmo, ao lado da página e do zoom): Caneta (vermelho, azul, azul-marinho ou preto; 5 espessuras, da 0,1 à 0,5), Marca-texto, Máquina de escrever, Borracha. Um dedo desenha, dois rolam.
+- Marcações no PDF (ferramentas sempre na barra de baixo, ao lado da página e do zoom; "Rolar" desliga a ferramenta e um dedo volta a rolar o PDF): Caneta (vermelho, azul, azul-marinho ou preto; 5 espessuras, da 0,1 à 0,5), Marca-texto, Máquina de escrever, Borracha. Um dedo desenha, dois rolam.
 - Máquina de escrever: toque na página e digite ali mesmo com o teclado (3 tamanhos de letra). Enter quebra a linha; tocar fora termina. Para editar, toque no texto com a ferramenta; apagar tudo exclui.
 - Fechamento: escreva 3 linhas sem consultar e toque em Concluir sessão.
 - Revisões (sessões 5, 10, 15...): refaça os erros que voltam e marque Acertei ou Errei. Algumas revisões trazem questões inéditas, que não couberam nas sessões normais.
@@ -61,4 +61,4 @@ O que é
 
 8. Atualizar o app
 - Mais > Versão do app mostra a versão instalada. "Procurar atualização" verifica na hora; havendo versão nova, o app recarrega sozinho.
-- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v19; a próxima é estudo-tjsp-v20).
+- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v20; a próxima é estudo-tjsp-v21).

@@ -1215,7 +1215,7 @@ async function openPDF(aulaKey, page, ctx = {}) {
   if (!history.state?.viewer) history.pushState({ viewer: 1 }, '');
   $('#vName').textContent = `${MAT(A.sj)} · ${A.lab}`; V.ctx = ctx; V.aula = aulaKey;
   $('#vJump').innerHTML = (ctx.jumps || []).map(([l, p]) => `<button class="chip" data-p="${p}">${esc(l)}</button>`).join('');
-  paintVGrid();
+  paintVGrid(); paintTools();
   if (V.file !== A.file) {
     $('#vPage').textContent = 'abrindo...';
     try { await V.doc?.destroy(); } catch {}
@@ -1583,24 +1583,21 @@ $('#vNote').onclick = e => { if (e.target.id === 'vClearOld') limparMarcacoes();
 function paintTools() {
   if (V.tool !== 'x') fechaTw();
   const on = !!V.tool;
-  $('#vTools').hidden = !on; $('#vPen').classList.toggle('on', on);
   vp.style.touchAction = on ? 'none' : '';
-  $$('#vTools [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === V.tool));
+  $$('#vTools [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === (V.tool || '')));
   const pal = V.tool === 'h' ? HL : V.tool === 'e' ? [] : PEN;
   $('#vColors').innerHTML = pal.map(c => `<button class="sw ${V.color[V.tool] === c ? 'on' : ''}" data-c="${c}" style="background:${c}" aria-label="${CNOME[c] || 'Cor'}" title="${CNOME[c] || ''}"></button>`).join('')
     + (V.tool === 'p' ? '<span class="esp">' + ESP.map((w, i) => `<button class="espb ${V.esp === w ? 'on' : ''}" data-w="${w}" aria-label="Espessura 0,${i + 1}" title="0,${i + 1}"><i style="width:${4 + i * 3}px;height:${4 + i * 3}px;background:${V.color.p}"></i></button>`).join('') + '</span>' : '')
     + (V.tool === 'x' ? '<span class="esp">' + TAM.map((z, i) => `<button class="espb ${V.tam === z ? 'on' : ''}" data-tz="${z}" aria-label="Letra ${['pequena', 'média', 'grande'][i]}" title="Letra ${['pequena', 'média', 'grande'][i]}"><b style="font-size:${11 + i * 4}px;color:${V.color.x}">A</b></button>`).join('') + '</span>' : '');
   if (V.tool === 'h' && V.doc) for (let k = Math.max(1, V.cur - 1); k <= Math.min(V.doc.numPages, V.cur + 2); k++) textLines(k);
 }
-$('#vPen').onclick = () => { V.tool = V.tool ? null : 'p'; paintTools(); };
 $('#vTools').onclick = async e => {
-  const t = e.target.closest('[data-tool]'); if (t) { V.tool = t.dataset.tool; paintTools(); return; }
+  const t = e.target.closest('[data-tool]'); if (t) { V.tool = t.dataset.tool || null; paintTools(); return; }
   const c = e.target.closest('[data-c]'); if (c) { V.color[V.tool] = c.dataset.c; paintTools(); return; }
   const tz = e.target.closest('[data-tz]'); if (tz) { V.tam = +tz.dataset.tz; try { localStorage.setItem('texto-tjsp', tz.dataset.tz); } catch {} paintTools(); return; }
   const w = e.target.closest('[data-w]'); if (w) { V.esp = +w.dataset.w; try { localStorage.setItem('caneta-tjsp', w.dataset.w); } catch {} paintTools(); return; }
   const id = e.target.closest('button')?.id;
   if (id === 'vUndo') { const u = V.undo.pop(); if (!u) return toast('Nada para desfazer.'); V.ann.set(u.p, u.ops); drawInk(u.p); await saveAnn(u.p); if (u.p !== V.cur) goPage(u.p); }
-  if (id === 'vDone') { V.tool = null; paintTools(); }
   if (id === 'vClear') limparMarcacoes();
 };
 
