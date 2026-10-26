@@ -36,6 +36,7 @@ O que é
 - Comentar: depois de responder uma questão (e nos erros da revisão), o botão "Comentar" pede à IA configurada em Mais > IA um comentário curto: por que o gabarito está certo, o erro de cada alternativa e onde você provavelmente se confundiu. Nas questões de lei, a IA recebe o artigo citado no gabarito e o trecho da lei seca em volta dele (os artigos vizinhos, de onde costumam vir as alternativas erradas), tirados da sua lei seca. Cada toque gera um comentário (cerca de US$ 0,015 no Sonnet 5.5); depois ele fica guardado e "Ver comentário" abre sem custo e sem internet. Se o comentário ficou fraco, "Gerar de novo" pede outro. Precisa de internet e da chave da API neste aparelho.
 - Relatório (aba própria): quanto você estudou (sessões feitas, questões respondidas, sessões e questões por semana nas últimas 8 semanas, sessões e ciclo atual de cada matéria) e como está indo (acerto por matéria com a marca dos 50% dos blocos eliminatórios, e tabela por tópico, com filtro por matéria e ordem). Chute conta à parte, nunca como acerto. Com menos de 10 questões aparece "poucos dados", porque a taxa ainda engana. Tempo de estudo não é contado.
 - Cartões (aba Erros): revisão rápida das "Regras corretas" geradas pela IA, sem internet. Lembre a regra, vire o cartão e marque Lembrei ou Não lembrei; os que você não lembrou voltam primeiro.
+- Anki (aba Erros, botão "Anki"): baixa um arquivo com os seus erros como cartões, para estudar à parte no AnkiDroid nos momentos vagos. Frente: o enunciado com as alternativas; verso: gabarito, sua resposta, regra correta e comentário da IA (quando houver). No AnkiDroid: Menu › Importar › escolha o arquivo; os cartões vão para o baralho TJ-SP::Erros. Exporte e importe de novo quando quiser: o Anki atualiza os cartões que já existem e só acrescenta os novos. Não muda nada no app (revisões, progresso). Use o AnkiDroid atualizado (versão 2.17 ou mais nova).
 - Mini-simulado (aba Cronograma): 30 questões que não entraram no cronograma, na proporção da prova (Português 8, Direito 15, Informática 4, Raciocínio 3), com resultado por bloco. Bom no fim de cada ciclo. Não conta como sessão do cronograma; os erros dele voltam na próxima revisão.
 
 5. Como o cronograma foi montado (por ciclos, modelo híbrido nas leis)
@@ -65,4 +66,4 @@ O que é
 
 8. Atualizar o app
 - Mais > Versão do app mostra a versão instalada. "Procurar atualização" verifica na hora; havendo versão nova, o app recarrega sozinho.
-- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v24; a próxima é estudo-tjsp-v25).
+- Para publicar: substitua os arquivos no repositório e mude a primeira linha do sw.js (hoje estudo-tjsp-v25; a próxima é estudo-tjsp-v26).

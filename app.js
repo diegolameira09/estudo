@@ -761,7 +761,7 @@ function renderErros() {
   if (st === 'refazer') L = L.filter(e => status(e) === 'Refazer');
   if (st === 'pendente') L = L.filter(e => status(e) === 'Pendente');
   const nCart = S.erros.filter(e => e.regra).length;
-  let h = `<div class="row" style="margin-bottom:10px"><h2 class="sp">Caderno de erros</h2><button class="btn" id="eCart">Cartões (${nCart})</button><button class="btn pri" id="eNew">+ Novo</button></div>
+  let h = `<div class="row" style="margin-bottom:10px"><h2 class="sp">Caderno de erros</h2><button class="btn" id="eCart">Cartões (${nCart})</button><button class="btn" id="eAnki" title="Baixa os erros como cartões para importar no Anki (AnkiDroid)">Anki</button><button class="btn pri" id="eNew">+ Novo</button></div>
   <div class="card"><select id="eMat"><option value="">Todas as matérias</option>${ORDEM.map(m => `<option value="${m}" ${m === mat ? 'selected' : ''}>${esc(MAT(m))}</option>`).join('')}</select>
   <div class="row wrap" style="margin-top:8px" id="eSt">${[['todos', 'Todos'], ['semregra', 'Sem regra'], ['pendente', 'Pendentes'], ['refazer', 'Refazer']].map(([k, l]) => `<button class="chip ${st === k ? 'on' : ''}" data-st="${k}">${l}</button>`).join('')}</div>
   <div class="small mut" style="margin-top:8px">${L.length} de ${S.erros.length} erros</div></div>`;
@@ -773,6 +773,7 @@ function renderErros() {
   v.onchange = ev => { if (ev.target.id === 'eMat') { S.filtro.mat = ev.target.value; render(); } };
   v.onclick = ev => {
     if (ev.target.id === 'eCart') return cartoes();
+    if (ev.target.id === 'eAnki') return exportarAnki();
     if (ev.target.id === 'eNew') return errForm({ sessao: curN() || total(), aula: defaultAula(curN() || total()) });
     const c = ev.target.closest('[data-st]'); if (c) { S.filtro.st = c.dataset.st; render(); return; }
     const li = ev.target.closest('.li'); if (li) errForm(S.erros.find(x => x.id === +li.dataset.id));
@@ -890,6 +891,29 @@ async function copyText(txt) {
     dlg.showModal(); $('textarea', f).select();
     return new Promise(res => dlg.addEventListener('close', () => res(ok), { once: true }));
   }
+}
+/* ---------------- Anki: os erros como cartões, para estudar à parte no AnkiDroid ---------------- */
+// arquivo de texto do Anki (separado por tabulação, com cabeçalho): frente = enunciado com as alternativas; verso = gabarito, sua resposta,
+// regra correta e comentário da IA. O guid fixo (q-sessão-chave-questão) faz o Anki atualizar o cartão ao importar de novo, sem duplicar.
+// Não muda nada no app: é só exportação. Só entram erros com o texto da questão tirado do PDF.
+function exportarAnki() {
+  const L = S.erros.filter(e => e.enun);
+  if (!L.length) return toast('Nenhum erro com o texto da questão ainda (importe os PDFs e erre alguma questão na grade).', 5000);
+  const cel = t => '"' + String(t || '').replace(/"/g, '""').replace(/\t/g, ' ') + '"';
+  const html = t => esc(t).replace(/\r?\n/g, '<br>');
+  const R = v => (v === 'V' ? 'Verdadeiro' : v === 'F' ? 'Falso' : v);
+  const linhas = L.map(e => {
+    const A = aula(e.aula), tp = itemDoErro(e)?.tp, top = tp && S.C.tps?.[tp];
+    const frente = `<div style="font-size:.8em;color:#888">${esc(A ? MAT(A.sj) : '')}${top ? ' · ' + esc(top) : ''}</div>${html(e.enun)}`;
+    const verso = [e.gab ? `<b>Gabarito: ${esc(R(e.gab))}</b>` : '', e.minha ? `Você marcou: ${esc(R(e.minha))}${e.tipo === 'Chute' ? ' (chute)' : ''}` : '',
+      e.regra ? `<b>Regra correta:</b> ${html(e.regra)}` : '', e.alerta ? `<b>Atenção:</b> ${html(e.alerta)}` : '', e.iaCom ? `<b>Comentário:</b><br>${html(e.iaCom)}` : '',
+      `<span style="font-size:.8em;color:#888">${esc(A?.lab || '')} · questão ${esc(e.questao)}</span>`].filter(Boolean).join('<br><br>');
+    const tags = ['TJSP', A ? A.sj : '', e.tipo ? 'erro-' + e.tipo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() : ''].filter(Boolean).join(' ');
+    return [cel('tjsp-' + (e.uid || e.id)), cel(frente), cel(verso), cel(tags)].join('\t');
+  });
+  const cab = ['#separator:tab', '#html:true', '#notetype:Basic', '#deck:TJ-SP::Erros', '#guid column:1', '#tags column:4'];
+  download(`tjsp-erros-anki-${todayISO()}.txt`, cab.join('\n') + '\n' + linhas.join('\n') + '\n', 'text/plain;charset=utf-8');
+  toast(`${L.length} cartões no arquivo. No AnkiDroid: Menu › Importar › escolha o arquivo (importar de novo atualiza, sem duplicar).`, 7000);
 }
 function download(name, text, type) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.append(a); a.click();
