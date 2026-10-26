@@ -3,8 +3,8 @@
 // Devolve { n: { r: 'A'..'E' | 'V' | 'F', ref: texto depois da resposta (artigo, explicação) } }.
 
 const LIXO = /Esse material está protegido|Quaisquer reproduç|Licenciado para|Licensed to|Protegido por Eduzz|@|\d{3}\.?\d{3}\.?\d{3}-?\d{2}/;
-const GAB = /^\s*0*(\d{1,4})\s*(?:[-–)]|\s)\s*(Verdadeiro|Falso|Certo|Errado|[A-E](?=\s*$|\s*[./–-]|\s+Art))\b\s*[./-]?\s*(.*)$/;
-const resp = s => (/^(Verdadeiro|Certo)$/.test(s) ? 'V' : /^(Falso|Errado)$/.test(s) ? 'F' : s);
+const GAB = /^\s*0*(\d{1,4})\s*(?:[-–)]|\s)\s*(Verdadeir[oa]|Fals[oa]|Certo|Errado|[A-E](?=\s*$|\s*[./–-]|\s+Art))\b\s*[./-]?\s*(.*)$/;
+const resp = s => (/^(Verdadeir[oa]|Certo)$/.test(s) ? 'V' : /^(Fals[oa]|Errado)$/.test(s) ? 'F' : s);
 
 async function linhas(doc, p) {
   const tc = await (await doc.getPage(p)).getTextContent();
