@@ -125,6 +125,8 @@ details summary{cursor:pointer;min-height:36px;display:flex;align-items:center}
 .qvi{max-height:65vh;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
 .qvi canvas{display:block;width:100%;cursor:zoom-in}
 .qv.zoom .qvi canvas{width:170%;cursor:zoom-out}
+.qv.pen .qvi canvas{cursor:crosshair;outline:2px solid var(--acc);outline-offset:-2px}
+.qv .chip.on{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
 #vGrid .qv{display:none}
 .ql{min-width:34px;min-height:32px;border:1px solid var(--line);background:var(--card);border-radius:8px;font-size:13px;cursor:pointer}
 .ql.on{background:var(--acc);color:var(--acc-ink);border-color:var(--acc);font-weight:600}

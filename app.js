@@ -255,12 +255,13 @@ async function recorte(file, s, q, cssW) {
     const pg = await X.doc.getPage(g.p), w1 = pg.getViewport({ scale: 1 }).width, vp = pg.getViewport({ scale: Math.min(3, cssW * dpr / ((R.x1 - R.x0) * w1)) });
     const c = document.createElement('canvas'); c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
     await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
-    partes.push({ c, sx: R.x0 * c.width, sy: g.y0 * c.height, sw: (R.x1 - R.x0) * c.width, sh: (g.y1 - g.y0) * c.height });
+    const rec = await kvGet(akey(file, g.p)), ops = Array.isArray(rec) ? rec : rec?.o || []; if (ops.length) pintaOps(c.getContext('2d'), ops, c.width, c.height);
+    partes.push({ c, p: g.p, W: c.width, H: c.height, sx: R.x0 * c.width, sy: g.y0 * c.height, sw: (R.x1 - R.x0) * c.width, sh: (g.y1 - g.y0) * c.height });
   }
   const out = document.createElement('canvas'), ctx = out.getContext('2d'); out.width = Math.ceil(partes[0].sw); out.height = Math.ceil(partes.reduce((t, x) => t + x.sh, 0) + (partes.length - 1) * 6);
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, out.width, out.height); let y = 0;
-  for (const x of partes) { if (y) { ctx.fillStyle = '#CBD5E1'; ctx.fillRect(0, y + 2, out.width, 2); y += 6; } ctx.drawImage(x.c, x.sx, x.sy, x.sw, x.sh, 0, y, out.width, x.sh); y += x.sh; x.c.width = 0; }
-  return { c: out, pag: en.pag, mais: R.seg.length > 3 };
+  for (const x of partes) { if (y) { ctx.fillStyle = '#CBD5E1'; ctx.fillRect(0, y + 2, out.width, 2); y += 6; } ctx.drawImage(x.c, x.sx, x.sy, x.sw, x.sh, 0, y, out.width, x.sh); x.y = y; y += x.sh; x.c.width = 0; delete x.c; }
+  return { c: out, pag: en.pag, mais: R.seg.length > 3, partes };
 }
 async function mostraQv(el) {
   const { qa: a, qs, q } = el.dataset, A = aula(a), k = `${a}|${qs}|${q}`;
@@ -275,8 +276,40 @@ async function mostraQv(el) {
   const r = await QV.get(k); if (!el.isConnected) return;
   if (!r?.c) { el.innerHTML = `<div class="small mut">Não consegui recortar esta questão. ${pdf(r?.pag || +qs)}</div>`; return; }
   const c = document.createElement('canvas'); c.width = r.c.width; c.height = r.c.height; c.getContext('2d').drawImage(r.c, 0, 0);
-  el.innerHTML = `<div class="qvi"></div><div class="row small mut">${pdf(r.pag)}<span>${r.mais ? 'A questão continua no PDF. ' : ''}Toque na imagem para ampliar.</span></div>`;
-  $('.qvi', el).append(c); c.onclick = () => el.classList.toggle('zoom');
+  el.innerHTML = `<div class="qvi"></div><div class="row small mut">${pdf(r.pag)}${r.partes ? '<button type="button" class="chip qvp" aria-pressed="false">✎ Riscar</button><button type="button" class="chip qvu" hidden>Desfazer</button>' : ''}<span>${r.mais ? 'A questão continua no PDF. ' : ''}Toque na imagem para ampliar.</span></div>`;
+  $('.qvi', el).append(c); c.onclick = () => { if (!el.classList.contains('pen')) el.classList.toggle('zoom'); };
+  if (r.partes) canetaQv(el, c, r, A, k);
+}
+// traços feitos no recorte desta abertura (para o Desfazer)
+const QVU = [];
+function canetaQv(el, c, r, A, k) {
+  const bp = $('.qvp', el), bu = $('.qvu', el), ctx = c.getContext('2d'); let st = null;
+  bp.onclick = () => { const on = !el.classList.contains('pen'); el.classList.toggle('pen', on); el.classList.remove('zoom'); bp.classList.toggle('on', on); bp.setAttribute('aria-pressed', on); c.style.touchAction = on ? 'none' : ''; bu.hidden = !on || !QVU.some(u => u.k === k); };
+  const pt = e => { const b = c.getBoundingClientRect(); return [(e.clientX - b.left) * c.width / b.width, (e.clientY - b.top) * c.height / b.height]; };
+  c.addEventListener('pointerdown', e => {
+    if (!el.classList.contains('pen')) return; e.preventDefault(); c.setPointerCapture?.(e.pointerId);
+    const [x, y] = pt(e), part = r.partes.find(x0 => y >= x0.y && y <= x0.y + x0.sh) || r.partes[r.partes.length - 1];
+    st = { part, pts: [[x, y]] }; ctx.strokeStyle = V.color.p; ctx.lineWidth = V.esp * part.W; ctx.lineCap = ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(x, y);
+  });
+  c.addEventListener('pointermove', e => { if (!st) return; e.preventDefault(); const [x, y] = pt(e); st.pts.push([x, y]); ctx.lineTo(x, y); ctx.stroke(); });
+  const fim = async () => {
+    if (!st) return; const { part, pts } = st; st = null; if (pts.length < 2) return;
+    // do recorte para a página: mesma escala; desloca pela posição da parte e normaliza pelo tamanho da página
+    const op = { t: 'p', c: V.color.p, w: V.esp, pts: pts.flatMap(([x, y]) => [rnd((part.sx + x) / part.W), rnd((part.sy + Math.min(Math.max(y - part.y, 0), part.sh)) / part.H)]) };
+    await gravaOp(A, part.p, ops => ops.concat([op])); QVU.push({ k, a: A.file, p: part.p, op }); QV.delete(k); bu.hidden = false;
+  };
+  c.addEventListener('pointerup', fim); c.addEventListener('pointercancel', fim);
+  bu.onclick = async () => {
+    const i = QVU.map(u => u.k).lastIndexOf(k); if (i < 0) return; const [u] = QVU.splice(i, 1), alvo = JSON.stringify(u.op);
+    await gravaOp(A, u.p, ops => { const j = ops.map(o => JSON.stringify(o)).lastIndexOf(alvo); return j < 0 ? ops : ops.filter((_, n) => n !== j); });
+    QV.delete(k); const on = el.classList.contains('pen'); delete el.dataset.ok; await mostraQv(el); if (on) $('.qvp', el)?.click();
+  };
+}
+// grava uma marcação na página do PDF, no mesmo formato do leitor; se o leitor está com esse PDF, atualiza o que ele tem na memória
+async function gravaOp(A, p, muda) {
+  const rec = await kvGet(akey(A.file, p)), ops = muda(Array.isArray(rec) ? rec : rec?.o || []);
+  await kvSet(akey(A.file, p), { u: Date.now(), o: ops, v: rec?.v || A.ver }); scheduleSync();
+  if (V.annFile === A.file) { V.ann.set(p, ops); drawInk(p); }
 }
 /* ---------------- texto da questão extraído do PDF (offline), para a IA ---------------- */
 // cada erro guarda enun (enunciado), coment (comentário e gabarito), xt (quando extraiu) e xv (versão do PDF usada)
@@ -1414,10 +1447,12 @@ function drawHL(ctx, ops, W, H) {
 function drawInk(i, extra) {
   const ink = vp.querySelector(`.pg[data-p="${i}"] .ink`); if (!ink) return;
   const ctx = ink.getContext('2d'); ctx.clearRect(0, 0, ink.width, ink.height);
-  const ops = [...(V.ann.get(i) || []), ...(extra ? [extra] : [])];
-  drawHL(ctx, ops.filter(o => o.t === 'r'), ink.width, ink.height);
-  for (const op of ops.filter(o => o.t === 'h')) drawOp(ctx, op, ink.width, ink.height);
-  for (const op of ops.filter(o => o.t !== 'h' && o.t !== 'r')) drawOp(ctx, op, ink.width, ink.height);
+  pintaOps(ctx, [...(V.ann.get(i) || []), ...(extra ? [extra] : [])], ink.width, ink.height);
+}
+function pintaOps(ctx, ops, W, H) {
+  drawHL(ctx, ops.filter(o => o.t === 'r'), W, H);
+  for (const op of ops.filter(o => o.t === 'h')) drawOp(ctx, op, W, H);
+  for (const op of ops.filter(o => o.t !== 'h' && o.t !== 'r')) drawOp(ctx, op, W, H);
 }
 
 /* linhas de texto da página (para o marca-texto se encaixar na linha) */
