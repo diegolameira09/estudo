@@ -1091,7 +1091,7 @@ async function restaurar(file) {
   await run('erros', 'readwrite', s => s.clear());
   for (const e of data.erros) await errPut(e);
   if (data.anot) { await anotClear(); for (const [k, v] of Object.entries(data.anot)) await kvSet(k, v); V.ann = new Map(); V.annFile = null; }
-  S.prog = data.prog || {}; S.set = { ...S.set, ...(data.set || {}), device: S.set.device }; S.del = data.del || {}; await kvSet('del', S.del); S.erros = await errAll(); await migrarUids();
+  S.prog = data.prog || {}; S.set = { ...S.set, ...(data.set || {}), device: S.set.device }; S.del = data.del || {}; await kvSet('del', S.del); S.erros = await errAll(); await migrarUids(); await purgaAntigo();
   await kvSet('prog', S.prog); await kvSet('set', S.set); toast('Backup restaurado.'); render();
 }
 async function migrarUids() {
@@ -1109,6 +1109,7 @@ async function mergeData(data) {
   const byU = new Map(S.erros.map(e => [e.uid, e]));
   for (const re0 of data.erros || []) {
     const re = { ...re0, uid: re0.uid || legacyUid(re0) };
+    if (antigo(re.criado || re.upd)) continue;   // erro de outro cronograma (ver purgaAntigo)
     if (del[re.uid] && del[re.uid] >= ets(re)) continue;
     const le = byU.get(re.uid);
     if (!le) { delete re.id; re.id = await errPut(re); S.erros.push(re); byU.set(re.uid, re); r.novos++; }
@@ -1127,6 +1128,7 @@ async function mergeData(data) {
     return out;
   };
   for (const [n, rp] of Object.entries(data.prog || {})) {
+    if (antigo(rp?.upd)) continue;
     const lp = S.prog[n]; const tl = lp?.upd || 0, tr = rp?.upd || 0;
     const novo = !lp ? rp : (tr > tl || (tr === tl && rp.done && !lp.done)) ? junta(lp, rp) : junta(rp, lp);
     if (JSON.stringify(lp) !== JSON.stringify(novo)) { S.prog[n] = novo; r.ses++; }
@@ -1139,6 +1141,19 @@ async function mergeData(data) {
     if (V.file) { await loadAnn(V.file); [...V.rendered.keys()].forEach(drawInk); }
   }
   return r;
+}
+// progresso, simulados e erros de antes do cronograma atual (S.C.versao) são de outro plano: a sessão N mudou de conteúdo e as
+// listas mudaram de lugar. Saem ao abrir, ao restaurar e ao mesclar (senão a sincronização traz de volta); o erro ganha registro
+// de exclusão. Marcações nos PDFs e comentários da IA ficam (dependem do arquivo e da página, que não mudaram).
+const antigo = t => (t || 0) < new Date((S.C?.versao || '2000-01-01') + 'T00:00').getTime();
+async function purgaAntigo() {
+  let n = 0;
+  for (const [k, p] of Object.entries(S.prog)) if (antigo(p?.upd)) { delete S.prog[k]; n++; }
+  if (n) await saveProg();
+  const velhos = S.erros.filter(e => antigo(e.criado || e.upd));
+  for (const e of velhos) { await errDel(e.id); S.del[e.uid] = Date.now(); }
+  if (velhos.length) { S.erros = S.erros.filter(e => !velhos.includes(e)); await kvSet('del', S.del); S.syncDirty = true; }
+  return n + velhos.length;
 }
 const mergeMsg = r => `Mesclado. Erros: ${r.novos} novo(s), ${r.atual} atualizado(s), ${r.rem} removido(s). Sessões: ${r.ses}. Páginas com marcações: ${r.pags}.`;
 async function mesclarArquivos(files) {
@@ -1763,7 +1778,7 @@ async function init() {
   S.C = await (await fetch('cronograma.json')).json();
   S.prog = (await kvGet('prog')) || {};
   S.set = { ...S.set, ...((await kvGet('set')) || {}) };
-  S.erros = await errAll(); S.del = (await kvGet('del')) || {}; await migrarUids();
+  S.erros = await errAll(); S.del = (await kvGet('del')) || {}; await migrarUids(); await purgaAntigo();
   S.pdfs = new Set(await pdfKeys());
   { const ks = await run('kv', 'readonly', s => s.getAllKeys(IDBKeyRange.bound('pv|', 'pv|\uffff'))); const vs = await run('kv', 'readonly', s => s.getAll(IDBKeyRange.bound('pv|', 'pv|\uffff'))); ks.forEach((k, i) => (S.pv[k.slice(3)] = vs[i])); }
   { const r = IDBKeyRange.bound('gab|', 'gab|￿'), ks = await run('kv', 'readonly', s => s.getAllKeys(r)), vs = await run('kv', 'readonly', s => s.getAll(r)); ks.forEach((k, i) => (S.gab[k.slice(4)] = vs[i])); }
