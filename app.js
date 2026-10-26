@@ -1128,7 +1128,7 @@ async function mergeData(data) {
     return out;
   };
   for (const [n, rp] of Object.entries(data.prog || {})) {
-    if (antigo(rp?.upd)) continue;
+    if (progAntigo(rp)) continue;
     const lp = S.prog[n]; const tl = lp?.upd || 0, tr = rp?.upd || 0;
     const novo = !lp ? rp : (tr > tl || (tr === tl && rp.done && !lp.done)) ? junta(lp, rp) : junta(rp, lp);
     if (JSON.stringify(lp) !== JSON.stringify(novo)) { S.prog[n] = novo; r.ses++; }
@@ -1146,9 +1146,12 @@ async function mergeData(data) {
 // listas mudaram de lugar. Saem ao abrir, ao restaurar e ao mesclar (senão a sincronização traz de volta); o erro ganha registro
 // de exclusão. Marcações nos PDFs e comentários da IA ficam (dependem do arquivo e da página, que não mudaram).
 const antigo = t => (t || 0) < new Date((S.C?.versao || '2000-01-01') + 'T00:00').getTime();
+// sessão do plano antigo: última alteração anterior ao plano, ou (mesmo com alteração recente, p.ex. mexeu na sessão 1 do plano novo
+// num aparelho com versão antiga) concluída ou criada em data anterior ao plano
+const progAntigo = p => antigo(p?.upd) || (!!p?.done && !!p.date && p.date < (S.C?.versao || '')) || (!!p?.sim && !!p.criado && p.criado < (S.C?.versao || ''));
 async function purgaAntigo() {
   let n = 0;
-  for (const [k, p] of Object.entries(S.prog)) if (antigo(p?.upd)) { delete S.prog[k]; n++; }
+  for (const [k, p] of Object.entries(S.prog)) if (progAntigo(p)) { delete S.prog[k]; n++; }
   if (n) await saveProg();
   const velhos = S.erros.filter(e => antigo(e.criado || e.upd));
   for (const e of velhos) { await errDel(e.id); S.del[e.uid] = Date.now(); }
